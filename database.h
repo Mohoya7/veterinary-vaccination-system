@@ -1,6 +1,7 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
+#include <QCryptographicHash>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QDebug>
@@ -18,6 +19,13 @@ public:
 
     bool isConnected() const;
     QSqlDatabase& db();
+
+    static QString hashPassword(const QString& password) {
+        return QString(QCryptographicHash::hash(
+                           password.toUtf8(),
+                           QCryptographicHash::Sha256
+                           ).toHex());
+    }
 
 private:
     Database() = default;

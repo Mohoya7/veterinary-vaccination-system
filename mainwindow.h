@@ -14,10 +14,12 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const QString& role, QWidget *parent = nullptr);
     ~MainWindow() override;
 
 private:
     Ui::MainWindow *ui;
+    QString m_role;
 };
+
 #endif // MAINWINDOW_H
