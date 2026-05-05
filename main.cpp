@@ -8,6 +8,9 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
+    // Set RTL for the entire application — this is the root fix
+    a.setLayoutDirection(Qt::RightToLeft);
+
     if (!Database::instance().connect("localhost", "veterinary", "root", "1234")) {
         QMessageBox::critical(nullptr, "خطا", "اتصال به دیتابیس برقرار نشد.");
         return -1;

@@ -2,6 +2,9 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QPushButton>
+#include <QPainter>
+#include <QPropertyAnimation>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -17,9 +20,23 @@ public:
     explicit MainWindow(const QString& role, QWidget *parent = nullptr);
     ~MainWindow() override;
 
+private slots:
+    void onNavButtonClicked();
+    void onLogoutClicked();
+    void onToggleSidebar();
+
 private:
-    Ui::MainWindow *ui;
-    QString m_role;
+    void uncheckAllButtons();
+    void updateToggleIcon();
+
+    Ui::MainWindow       *ui;
+    QString               m_role;
+    bool                  m_sidebarExpanded = true;
+    QPropertyAnimation   *m_sidebarAnim     = nullptr;
+
+    static constexpr int kSidebarExpanded  = 220;
+    static constexpr int kSidebarCollapsed = 0;
+    static constexpr int kAnimDuration     = 220;
 };
 
 #endif // MAINWINDOW_H

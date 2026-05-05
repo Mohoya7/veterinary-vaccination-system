@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardWidget</class>
+ <widget class="QWidget" name="DashboardWidget">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>900</width><height>600</height></rect>
+  </property>
+  <property name="layoutDirection">
+   <enum>Qt::RightToLeft</enum>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing"><number>16</number></property>
+   <property name="leftMargin"><number>24</number></property>
+   <property name="topMargin"><number>24</number></property>
+   <property name="rightMargin"><number>24</number></property>
+   <property name="bottomMargin"><number>24</number></property>
+
+   <!-- Page title -->
+   <item>
+    <widget class="QLabel" name="pageTitle">
+     <property name="text"><string>داشبورد</string></property>
+     <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+    </widget>
+   </item>
+
+   <!-- Stats cards row -->
+   <item>
+    <layout class="QHBoxLayout" name="cardsLayout">
+     <property name="spacing"><number>12</number></property>
+
+     <!-- Reminder card -->
+     <item>
+      <widget class="QWidget" name="reminderCard">
+       <property name="minimumHeight"><number>88</number></property>
+       <layout class="QVBoxLayout" name="reminderCardLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>16</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <item>
+         <widget class="QLabel" name="reminderCardTitle">
+          <property name="text"><string>یادآوری‌های امروز</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="reminderCountLabel">
+          <property name="text"><string>0</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- Owner card -->
+     <item>
+      <widget class="QWidget" name="ownerCard">
+       <property name="minimumHeight"><number>88</number></property>
+       <layout class="QVBoxLayout" name="ownerCardLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>16</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <item>
+         <widget class="QLabel" name="ownerCardTitle">
+          <property name="text"><string>کل صاحبان</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="ownerCountLabel">
+          <property name="text"><string>0</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- Animal card -->
+     <item>
+      <widget class="QWidget" name="animalCard">
+       <property name="minimumHeight"><number>88</number></property>
+       <layout class="QVBoxLayout" name="animalCardLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>16</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <item>
+         <widget class="QLabel" name="animalCardTitle">
+          <property name="text"><string>کل حیوانات</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="animalCountLabel">
+          <property name="text"><string>0</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+    </layout>
+   </item>
+
+   <!-- Table card -->
+   <item>
+    <widget class="QWidget" name="tableCard">
+     <layout class="QVBoxLayout" name="tableCardLayout">
+      <property name="spacing"><number>12</number></property>
+      <property name="leftMargin"><number>16</number></property>
+      <property name="topMargin"><number>16</number></property>
+      <property name="rightMargin"><number>16</number></property>
+      <property name="bottomMargin"><number>16</number></property>
+      <item>
+       <widget class="QLabel" name="tableTitle">
+        <property name="text"><string>یادآوری‌های امروز</string></property>
+        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QTableWidget" name="remindersTable">
+        <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+        <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+        <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+        <property name="showGrid"><bool>false</bool></property>
+        <property name="alternatingRowColors"><bool>false</bool></property>
+        <column><property name="text"><string>حیوان</string></property></column>
+        <column><property name="text"><string>نوع</string></property></column>
+        <column><property name="text"><string>صاحب</string></property></column>
+        <column><property name="text"><string>شماره صاحب</string></property></column>
+        <column><property name="text"><string>نوع واکسن</string></property></column>
+        <column><property name="text"><string>وضعیت</string></property></column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
+    </spacer>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

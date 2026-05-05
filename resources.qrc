@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/bell.svg</file>
+        <file>icons/dog.svg</file>
+        <file>icons/grid.svg</file>
+        <file>icons/log-out.svg</file>
+        <file>icons/settings.svg</file>
+        <file>icons/syringe.svg</file>
+        <file>icons/users.svg</file>
+    </qresource>
+</RCC>
