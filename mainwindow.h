@@ -7,10 +7,11 @@
 #include <QPropertyAnimation>
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
+namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
+
+class DashboardWidget;
+class OwnersWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -29,14 +30,16 @@ private:
     void uncheckAllButtons();
     void updateToggleIcon();
 
-    Ui::MainWindow       *ui;
-    QString               m_role;
-    bool                  m_sidebarExpanded = true;
-    QPropertyAnimation   *m_sidebarAnim     = nullptr;
+    Ui::MainWindow     *ui;
+    QString             m_role;
+    bool                m_sidebarExpanded = true;
+    QPropertyAnimation *m_sidebarAnim    = nullptr;
+    DashboardWidget    *m_dashboard      = nullptr;
+    OwnersWidget       *m_owners         = nullptr;
 
     static constexpr int kSidebarExpanded  = 220;
     static constexpr int kSidebarCollapsed = 0;
     static constexpr int kAnimDuration     = 220;
 };
 
-#endif // MAINWINDOW_H
+#endif

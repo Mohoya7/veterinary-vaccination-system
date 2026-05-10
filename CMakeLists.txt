@@ -12,6 +12,10 @@ qt_add_executable(VetProject
     logindialog.h logindialog.cpp logindialog.ui
     dashboardwidget.h dashboardwidget.cpp dashboardwidget.ui
     sidebarwidget.h sidebarwidget.cpp
+    ownerswidget.h ownerswidget.cpp ownerswidget.ui
+    addownerdialog.h addownerdialog.cpp addownerdialog.ui
+    addanimaldialog.h addanimaldialog.cpp addanimaldialog.ui
+    addvaccinedialog.h addvaccinedialog.cpp addvaccinedialog.ui
 )
 qt_add_resources(VetProject "resources"
     PREFIX "/"

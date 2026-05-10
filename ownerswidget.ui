@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>OwnersWidget</class>
+ <widget class="QWidget" name="OwnersWidget">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>900</width><height>600</height></rect></property>
+  <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+  <layout class="QHBoxLayout" name="mainLayout">
+   <property name="spacing"><number>0</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+
+   <item>
+    <widget class="QWidget" name="profileArea">
+     <layout class="QVBoxLayout" name="profileAreaLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+
+      <item>
+       <widget class="QWidget" name="placeholderWidget">
+        <layout class="QVBoxLayout">
+         <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+         <item>
+          <widget class="QLabel" name="placeholderLabel">
+           <property name="text"><string>یک صاحب را از لیست انتخاب کنید</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QWidget" name="profileWidget">
+        <layout class="QVBoxLayout" name="profileWidgetLayout">
+         <property name="spacing"><number>0</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+
+         <item>
+          <widget class="QWidget" name="profileHeaderWidget">
+           <property name="minimumHeight"><number>76</number></property>
+           <property name="maximumHeight"><number>76</number></property>
+           <layout class="QHBoxLayout" name="profileHeaderLayout">
+            <property name="leftMargin"><number>22</number></property>
+            <property name="rightMargin"><number>22</number></property>
+            <property name="topMargin"><number>12</number></property>
+            <property name="bottomMargin"><number>12</number></property>
+            <property name="spacing"><number>14</number></property>
+            <item>
+             <widget class="QLabel" name="ownerAvatarLabel">
+              <property name="minimumSize"><size><width>50</width><height>50</height></size></property>
+              <property name="maximumSize"><size><width>50</width><height>50</height></size></property>
+              <property name="alignment"><set>Qt::AlignCenter</set></property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="ownerInfoLayout">
+              <property name="spacing"><number>3</number></property>
+              <item><widget class="QLabel" name="ownerNameLabel"><property name="text"><string></string></property></widget></item>
+              <item><widget class="QLabel" name="ownerSubLabel"><property name="text"><string></string></property></widget></item>
+             </layout>
+            </item>
+            <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+            <item><widget class="QPushButton" name="btnEdit"><property name="text"><string>ویرایش</string></property></widget></item>
+            <item><widget class="QPushButton" name="btnDelete"><property name="text"><string>حذف</string></property></widget></item>
+           </layout>
+          </widget>
+         </item>
+
+         <item>
+          <widget class="QScrollArea" name="profileScrollArea">
+           <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+           <property name="widgetResizable"><bool>true</bool></property>
+           <widget class="QWidget" name="profileScrollContent">
+            <layout class="QVBoxLayout" name="profileScrollLayout">
+             <property name="spacing"><number>14</number></property>
+             <property name="leftMargin"><number>22</number></property>
+             <property name="rightMargin"><number>22</number></property>
+             <property name="topMargin"><number>18</number></property>
+             <property name="bottomMargin"><number>18</number></property>
+
+             <item>
+              <widget class="QWidget" name="contactCard">
+               <layout class="QVBoxLayout" name="contactCardLayout">
+                <property name="spacing"><number>0</number></property>
+                <property name="leftMargin"><number>16</number></property>
+                <property name="rightMargin"><number>16</number></property>
+                <property name="topMargin"><number>14</number></property>
+                <property name="bottomMargin"><number>14</number></property>
+                <item><widget class="QLabel" name="contactCardTitle"><property name="text"><string>اطلاعات تماس</string></property></widget></item>
+                <item>
+                 <widget class="QWidget" name="contactRowsContainer">
+                  <layout class="QVBoxLayout" name="contactRowsLayout">
+                   <property name="spacing"><number>0</number></property>
+                   <property name="leftMargin"><number>0</number></property>
+                   <property name="rightMargin"><number>0</number></property>
+                   <property name="topMargin"><number>8</number></property>
+                   <property name="bottomMargin"><number>0</number></property>
+                  </layout>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+
+             <item>
+              <widget class="QWidget" name="animalsCard">
+               <layout class="QVBoxLayout" name="animalsCardLayout">
+                <property name="spacing"><number>8</number></property>
+                <property name="leftMargin"><number>16</number></property>
+                <property name="rightMargin"><number>16</number></property>
+                <property name="topMargin"><number>14</number></property>
+                <property name="bottomMargin"><number>14</number></property>
+                <item><widget class="QLabel" name="animalsCardTitle"><property name="text"><string>حیوانات</string></property></widget></item>
+                <item>
+                 <widget class="QWidget" name="animalsContainer">
+                  <layout class="QGridLayout" name="animalsGridLayout">
+                   <property name="spacing"><number>8</number></property>
+                   <property name="leftMargin"><number>0</number></property>
+                   <property name="rightMargin"><number>0</number></property>
+                   <property name="topMargin"><number>0</number></property>
+                   <property name="bottomMargin"><number>0</number></property>
+                  </layout>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+
+             <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QWidget" name="listPanel">
+     <property name="minimumWidth"><number>260</number></property>
+     <property name="maximumWidth"><number>260</number></property>
+     <layout class="QVBoxLayout" name="listPanelLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+
+      <item>
+       <widget class="QWidget" name="listHeader">
+        <layout class="QVBoxLayout" name="listHeaderLayout">
+         <property name="leftMargin"><number>14</number></property>
+         <property name="rightMargin"><number>14</number></property>
+         <property name="topMargin"><number>14</number></property>
+         <property name="bottomMargin"><number>14</number></property>
+         <property name="spacing"><number>10</number></property>
+         <item><widget class="QLabel" name="listTitle"><property name="text"><string>صاحبان</string></property></widget></item>
+         <item><widget class="QLineEdit" name="searchEdit"><property name="placeholderText"><string>جستجو نام یا شماره...</string></property></widget></item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QListWidget" name="ownerListWidget">
+        <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+        <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+       </widget>
+      </item>
+
+      <item>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>12</number></property>
+        <property name="rightMargin"><number>12</number></property>
+        <property name="topMargin"><number>10</number></property>
+        <property name="bottomMargin"><number>10</number></property>
+        <item>
+         <widget class="QPushButton" name="btnAddOwner">
+          <property name="text"><string>+ افزودن صاحب جدید</string></property>
+          <property name="minimumHeight"><number>38</number></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+</ui>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AddAnimalDialog</class>
+ <widget class="QDialog" name="AddAnimalDialog">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>420</width><height>480</height></rect></property>
+  <property name="windowTitle"><string>افزودن حیوان</string></property>
+  <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing"><number>0</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+
+   <item>
+    <widget class="QWidget" name="headerWidget">
+     <property name="minimumHeight"><number>60</number></property>
+     <property name="maximumHeight"><number>60</number></property>
+     <layout class="QHBoxLayout">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <item><widget class="QLabel" name="dialogTitle"><property name="text"><string>افزودن حیوان جدید</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QWidget" name="formWidget">
+     <layout class="QFormLayout" name="formLayout">
+      <property name="leftMargin"><number>24</number></property>
+      <property name="rightMargin"><number>24</number></property>
+      <property name="topMargin"><number>20</number></property>
+      <property name="bottomMargin"><number>20</number></property>
+      <property name="horizontalSpacing"><number>16</number></property>
+      <property name="verticalSpacing"><number>12</number></property>
+
+      <item row="0" column="0"><widget class="QLabel"><property name="text"><string>صاحب</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLabel" name="ownerInfoLabel"><property name="text"><string></string></property></widget></item>
+
+      <item row="1" column="0"><widget class="QLabel"><property name="text"><string>نام حیوان *</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLineEdit" name="animalNameEdit"><property name="placeholderText"><string>نام</string></property></widget></item>
+
+      <item row="2" column="0"><widget class="QLabel"><property name="text"><string>نوع *</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="typeCombo">
+        <item><property name="text"><string>سگ</string></property></item>
+        <item><property name="text"><string>گربه</string></property></item>
+       </widget>
+      </item>
+
+      <item row="3" column="0"><widget class="QLabel"><property name="text"><string>نژاد</string></property></widget></item>
+      <item row="3" column="1"><widget class="QLineEdit" name="breedEdit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
+
+      <item row="4" column="0"><widget class="QLabel"><property name="text"><string>تاریخ تولد</string></property></widget></item>
+      <item row="4" column="1"><widget class="QDateEdit" name="birthDateEdit"><property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>yyyy/MM/dd</string></property></widget></item>
+
+      <item row="5" column="0"><widget class="QLabel"><property name="text"><string>جنسیت *</string></property></widget></item>
+      <item row="5" column="1">
+       <widget class="QComboBox" name="genderCombo">
+        <item><property name="text"><string>نر</string></property></item>
+        <item><property name="text"><string>ماده</string></property></item>
+       </widget>
+      </item>
+
+      <item row="6" column="0"><widget class="QLabel"><property name="text"><string>وزن (kg)</string></property></widget></item>
+      <item row="6" column="1">
+       <widget class="QDoubleSpinBox" name="weightSpin">
+        <property name="minimum"><double>0.100000000000000</double></property>
+        <property name="maximum"><double>200.000000000000000</double></property>
+        <property name="singleStep"><double>0.100000000000000</double></property>
+        <property name="value"><double>5.000000000000000</double></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+
+   <item>
+    <widget class="QWidget" name="footerWidget">
+     <property name="minimumHeight"><number>60</number></property>
+     <property name="maximumHeight"><number>60</number></property>
+     <layout class="QHBoxLayout">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+      <item><widget class="QPushButton" name="btnCancel"><property name="text"><string>انصراف</string></property><property name="minimumWidth"><number>90</number></property></widget></item>
+      <item><widget class="QPushButton" name="btnSave"><property name="text"><string>ذخیره</string></property><property name="minimumWidth"><number>90</number></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+</ui>
