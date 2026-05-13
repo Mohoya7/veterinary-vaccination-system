@@ -16,6 +16,9 @@ qt_add_executable(VetProject
     addownerdialog.h addownerdialog.cpp addownerdialog.ui
     addanimaldialog.h addanimaldialog.cpp addanimaldialog.ui
     addvaccinedialog.h addvaccinedialog.cpp addvaccinedialog.ui
+    vaccinationswidget.h vaccinationswidget.cpp vaccinationswidget.ui
+    styledmessagebox.h styledmessagebox.cpp
+    icons/chevron-down.svg
 )
 qt_add_resources(VetProject "resources"
     PREFIX "/"
@@ -27,6 +30,7 @@ qt_add_resources(VetProject "resources"
         icons/settings.svg
         icons/syringe.svg
         icons/users.svg
+	icons/chevron-down.svg
 )
 target_include_directories(VetProject PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

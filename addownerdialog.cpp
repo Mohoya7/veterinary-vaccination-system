@@ -1,5 +1,6 @@
 #include "addownerdialog.h"
 #include "ui_addownerdialog.h"
+#include "styledmessagebox.h"
 #include <QSqlQuery>
 #include <QMessageBox>
 

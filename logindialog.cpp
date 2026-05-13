@@ -1,5 +1,6 @@
 #include "logindialog.h"
 #include "ui_logindialog.h"
+#include "styledmessagebox.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QtMath>

@@ -11,7 +11,10 @@ class AddVaccineDialog : public QDialog
     Q_OBJECT
 
 public:
+    // Add mode
     explicit AddVaccineDialog(int animalId, QWidget *parent = nullptr);
+    // Edit mode
+    explicit AddVaccineDialog(int animalId, int vaccinationId, QWidget *parent = nullptr);
     ~AddVaccineDialog();
 
 private slots:
@@ -21,11 +24,13 @@ private slots:
 private:
     void applyStyle();
     void loadVaccineTypes();
+    void loadExistingData(int vaccinationId);
 
     Ui::AddVaccineDialog *ui;
-    int m_animalId  = -1;
+    int m_animalId      = -1;
+    int m_vaccinationId = -1; // -1 = add mode
     QString m_animalType;
-    QMap<int, int> m_typeIdToDefaultDays; // vaccineType.id → default_reminder_days
+    QMap<int, int> m_typeIdToDefaultDays;
 };
 
 #endif

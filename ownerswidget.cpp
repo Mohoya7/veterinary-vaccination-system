@@ -3,6 +3,7 @@
 #include "addownerdialog.h"
 #include "addanimaldialog.h"
 #include "addvaccinedialog.h"
+#include "styledmessagebox.h"
 
 #include <QSqlQuery>
 #include <QMessageBox>

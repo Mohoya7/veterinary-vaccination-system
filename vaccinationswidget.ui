@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>VaccinationsWidget</class>
+ <widget class="QWidget" name="VaccinationsWidget">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
+  <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+  <layout class="QVBoxLayout" name="outerLayout">
+   <property name="spacing"><number>14</number></property>
+   <property name="leftMargin"><number>20</number></property>
+   <property name="rightMargin"><number>20</number></property>
+   <property name="topMargin"><number>18</number></property>
+   <property name="bottomMargin"><number>18</number></property>
+
+   <!-- Filter Bar -->
+   <item>
+    <widget class="QWidget" name="filterCard">
+     <layout class="QVBoxLayout" name="filterCardLayout">
+      <property name="spacing"><number>10</number></property>
+      <property name="leftMargin"><number>16</number></property>
+      <property name="rightMargin"><number>16</number></property>
+      <property name="topMargin"><number>14</number></property>
+      <property name="bottomMargin"><number>14</number></property>
+
+      <!-- Top row: title, search, combos, add button -->
+      <item>
+       <layout class="QHBoxLayout" name="topFilterRow">
+        <property name="spacing"><number>10</number></property>
+        <item>
+         <widget class="QLabel" name="pageTitle">
+          <property name="text"><string>واکسن‌ها</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="searchEdit">
+          <property name="placeholderText"><string>نام حیوان، نام صاحب یا شماره تماس را  جستوجو کنید.</string></property>
+          <property name="minimumWidth"><number>180</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="animalTypeCombo">
+          <item><property name="text"><string>همه انواع</string></property></item>
+          <item><property name="text"><string>سگ</string></property></item>
+          <item><property name="text"><string>گربه</string></property></item>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="statusCombo">
+         <item><property name="text"><string>همه وضعیت‌ها</string></property></item>
+         <item><property name="text"><string>موعد رسیده</string></property></item>
+         <item><property name="text"><string>تمدید شده</string></property></item>
+         <item><property name="text"><string>تأخیر دارد</string></property></item>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="vaccineTypeCombo">
+          <item><property name="text"><string>همه واکسن‌ها</string></property></item>
+         </widget>
+        </item>
+        <item>
+         <spacer>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnAddVaccine">
+          <property name="text"><string>+ ثبت واکسن جدید</string></property>
+          <property name="minimumHeight"><number>32</number></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Divider -->
+      <item>
+       <widget class="QFrame" name="filterDivider">
+        <property name="frameShape"><enum>QFrame::HLine</enum></property>
+       </widget>
+      </item>
+
+      <!-- Date filter row -->
+      <item>
+       <layout class="QHBoxLayout" name="dateFilterRow">
+        <property name="spacing"><number>10</number></property>
+        <item>
+         <widget class="QLabel" name="dateModeLabel">
+          <property name="text"><string>فیلتر تاریخ تزریق:</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnModeSingle">
+          <property name="text"><string>روز مشخص</string></property>
+          <property name="checkable"><bool>true</bool></property>
+          <property name="minimumHeight"><number>30</number></property>
+          <property name="minimumWidth"><number>80</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnModeRange">
+          <property name="text"><string>بازه زمانی</string></property>
+          <property name="checkable"><bool>true</bool></property>
+          <property name="checked"><bool>true</bool></property>
+          <property name="minimumHeight"><number>30</number></property>
+          <property name="minimumWidth"><number>80</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDateEdit" name="singleDateEdit">
+          <property name="calendarPopup"><bool>true</bool></property>
+          <property name="displayFormat"><string>yyyy/MM/dd</string></property>
+          <property name="visible"><bool>false</bool></property>
+          <property name="minimumHeight"><number>30</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDateEdit" name="dateFromEdit">
+          <property name="calendarPopup"><bool>true</bool></property>
+          <property name="displayFormat"><string>yyyy/MM/dd</string></property>
+          <property name="minimumHeight"><number>30</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="dateToLabel">
+          <property name="text"><string>تا</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDateEdit" name="dateToEdit">
+          <property name="calendarPopup"><bool>true</bool></property>
+          <property name="displayFormat"><string>yyyy/MM/dd</string></property>
+          <property name="minimumHeight"><number>30</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnClearDate">
+          <property name="text"><string>× پاک کردن</string></property>
+          <property name="minimumHeight"><number>30</number></property>
+         </widget>
+        </item>
+        <item>
+         <spacer>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Stats Row -->
+   <item>
+    <layout class="QHBoxLayout" name="statsRow">
+     <property name="spacing"><number>10</number></property>
+     <item>
+      <widget class="QWidget" name="statCardTotal">
+       <property name="minimumHeight"><number>64</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <item><widget class="QLabel" name="lblTotalTitle"><property name="text"><string>کل واکسن‌های ثبت شده</string></property></widget></item>
+        <item><widget class="QLabel" name="lblTotalCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="statCardToday">
+       <property name="minimumHeight"><number>64</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <item><widget class="QLabel" name="lblTodayTitle"><property name="text"><string>یادآوری‌های امروز</string></property></widget></item>
+        <item><widget class="QLabel" name="lblTodayCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="statCardOverdue">
+       <property name="minimumHeight"><number>64</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <item><widget class="QLabel" name="lblOverdueTitle"><property name="text"><string>تأخیر دارند</string></property></widget></item>
+        <item><widget class="QLabel" name="lblOverdueCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Table Card -->
+   <item>
+    <widget class="QWidget" name="tableCard">
+     <layout class="QVBoxLayout" name="tableCardLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QTableWidget" name="vaccinationsTable">
+        <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+        <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+        <column><property name="text"><string>حیوان</string></property></column>
+        <column><property name="text"><string>نوع</string></property></column>
+        <column><property name="text"><string>صاحب</string></property></column>
+        <column><property name="text"><string>شماره</string></property></column>
+        <column><property name="text"><string>نوع واکسن</string></property></column>
+        <column><property name="text"><string>تاریخ تزریق</string></property></column>
+        <column><property name="text"><string>یادآوری بعدی</string></property></column>
+        <column><property name="text"><string>وضعیت</string></property></column>
+        <column><property name="text"><string></string></property></column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+</ui>

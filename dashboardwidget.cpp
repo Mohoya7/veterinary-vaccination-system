@@ -1,5 +1,6 @@
 #include "dashboardwidget.h"
 #include "ui_dashboardwidget.h"
+#include "styledmessagebox.h"
 #include <QSqlQuery>
 #include <QDate>
 #include <QTableWidgetItem>

@@ -1,5 +1,6 @@
 #include "addanimaldialog.h"
 #include "ui_addanimaldialog.h"
+#include "styledmessagebox.h"
 #include <QSqlQuery>
 #include <QMessageBox>
 #include <QDate>

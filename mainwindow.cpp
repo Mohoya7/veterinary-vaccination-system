@@ -2,6 +2,9 @@
 #include "ui_mainwindow.h"
 #include "dashboardwidget.h"
 #include "ownerswidget.h"
+#include "vaccinationswidget.h"
+#include "styledmessagebox.h"
+
 #include <QPainter>
 #include <QIcon>
 #include <QPixmap>
@@ -190,16 +193,19 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         ui->contentStack->removeWidget(ui->contentStack->widget(0));
 
     m_dashboard = new DashboardWidget(this);
-    ui->contentStack->addWidget(m_dashboard);        // index 0 - Dashboard
+    ui->contentStack->addWidget(m_dashboard);          // index 0 - Dashboard
 
-    ui->contentStack->addWidget(new QWidget(this));  // index 1 - Animals placeholder
+    ui->contentStack->addWidget(new QWidget(this));    // index 1 - Animals placeholder
 
     m_owners = new OwnersWidget(this);
-    ui->contentStack->addWidget(m_owners);            // index 2 - Owners
+    ui->contentStack->addWidget(m_owners);              // index 2 - Owners
 
-    ui->contentStack->addWidget(new QWidget(this));  // index 3 - Reminders placeholder
-    ui->contentStack->addWidget(new QWidget(this));  // index 4 - Vaccinations placeholder
-    ui->contentStack->addWidget(new QWidget(this));  // index 5 - Settings placeholder
+    ui->contentStack->addWidget(new QWidget(this));    // index 3 - Reminders placeholder
+
+    m_vaccinations = new VaccinationsWidget(this);
+    ui->contentStack->addWidget(m_vaccinations);        // index 4 - Vaccinations
+
+    ui->contentStack->addWidget(new QWidget(this));    // index 5 - Settings placeholder
 
     ui->contentStack->setCurrentIndex(0);
 }

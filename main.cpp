@@ -3,6 +3,7 @@
 #include "database.h"
 #include "logindialog.h"
 #include "mainwindow.h"
+#include "styledmessagebox.h"
 
 int main(int argc, char *argv[])
 {
