@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RemindersWidget</class>
+ <widget class="QWidget" name="RemindersWidget">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>900</width><height>600</height></rect></property>
+  <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing"><number>14</number></property>
+   <property name="leftMargin"><number>20</number></property>
+   <property name="rightMargin"><number>20</number></property>
+   <property name="topMargin"><number>20</number></property>
+   <property name="bottomMargin"><number>20</number></property>
+
+   <!-- Header row -->
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <property name="spacing"><number>10</number></property>
+     <item>
+      <widget class="QLabel" name="pageTitle">
+       <property name="text"><string>یادآوری‌ها</string></property>
+      </widget>
+     </item>
+     <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+     <item>
+      <widget class="QPushButton" name="btnExportPdf">
+       <property name="text"><string>خروجی PDF</string></property>
+       <property name="minimumHeight"><number>36</number></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Filter card -->
+   <item>
+    <widget class="QWidget" name="filterCard">
+     <layout class="QVBoxLayout" name="filterCardLayout">
+      <property name="spacing"><number>10</number></property>
+      <property name="leftMargin"><number>16</number></property>
+      <property name="rightMargin"><number>16</number></property>
+      <property name="topMargin"><number>14</number></property>
+      <property name="bottomMargin"><number>14</number></property>
+
+      <!-- Row 1: mode buttons + search -->
+      <item>
+       <layout class="QHBoxLayout" name="filterRow1">
+        <property name="spacing"><number>10</number></property>
+        <item>
+         <widget class="QPushButton" name="btnModeToday">
+          <property name="text"><string>امروز</string></property>
+          <property name="minimumHeight"><number>34</number></property>
+          <property name="checkable"><bool>true</bool></property>
+          <property name="checked"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnModeOverdue">
+          <property name="text"><string>تأخیر دار</string></property>
+          <property name="minimumHeight"><number>34</number></property>
+          <property name="checkable"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="overdueDaysLabel">
+          <property name="text"><string>بازه تأخیر (روز):</string></property>
+          <property name="visible"><bool>false</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="overdueDaysSpin">
+          <property name="minimum"><number>1</number></property>
+          <property name="maximum"><number>365</number></property>
+          <property name="value"><number>7</number></property>
+          <property name="minimumHeight"><number>34</number></property>
+          <property name="visible"><bool>false</bool></property>
+         </widget>
+        </item>
+        <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+        <item>
+         <widget class="QLineEdit" name="searchEdit">
+          <property name="placeholderText"><string>جستوجو نام حیوان، نام صاحب یا شماره تماس</string></property>
+          <property name="minimumWidth"><number>220</number></property>
+          <property name="minimumHeight"><number>34</number></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <item>
+       <widget class="QFrame" name="filterDivider">
+        <property name="frameShape"><enum>QFrame::HLine</enum></property>
+        <property name="frameShadow"><enum>QFrame::Plain</enum></property>
+       </widget>
+      </item>
+
+      <!-- Row 2: combos -->
+      <item>
+       <layout class="QHBoxLayout" name="filterRow2">
+        <property name="spacing"><number>10</number></property>
+        <item>
+         <widget class="QComboBox" name="animalTypeCombo">
+          <item><property name="text"><string>همه انواع</string></property></item>
+          <item><property name="text"><string>سگ</string></property></item>
+          <item><property name="text"><string>گربه</string></property></item>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="followUpCombo">
+          <item><property name="text"><string>همه وضعیت‌ها</string></property></item>
+          <item><property name="text"><string>پیگیری نشده</string></property></item>
+          <item><property name="text"><string>پیگیری شده</string></property></item>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="responseCombo">
+          <item><property name="text"><string>همه پاسخ‌ها</string></property></item>
+          <item><property name="text"><string>در انتظار</string></property></item>
+          <item><property name="text"><string>جواب داد</string></property></item>
+          <item><property name="text"><string>جواب نداد</string></property></item>
+         </widget>
+        </item>
+        <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Stats row -->
+   <item>
+    <layout class="QHBoxLayout" name="statsLayout">
+     <property name="spacing"><number>12</number></property>
+     <item>
+      <widget class="QWidget" name="statCardToday">
+       <property name="minimumHeight"><number>72</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <property name="spacing"><number>4</number></property>
+        <item><widget class="QLabel" name="lblTodayTitle"><property name="text"><string>یادآوری‌های امروز</string></property></widget></item>
+        <item><widget class="QLabel" name="lblTodayCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="statCardOverdue">
+       <property name="minimumHeight"><number>72</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <property name="spacing"><number>4</number></property>
+        <item><widget class="QLabel" name="lblOverdueTitle"><property name="text"><string>تأخیر دار</string></property></widget></item>
+        <item><widget class="QLabel" name="lblOverdueCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="statCardDone">
+       <property name="minimumHeight"><number>72</number></property>
+       <layout class="QVBoxLayout">
+        <property name="leftMargin"><number>16</number></property>
+        <property name="rightMargin"><number>16</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <property name="spacing"><number>4</number></property>
+        <item><widget class="QLabel" name="lblDoneTitle"><property name="text"><string>پیگیری شده امروز</string></property></widget></item>
+        <item><widget class="QLabel" name="lblDoneCount"><property name="text"><string>۰</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Table card -->
+   <item>
+    <widget class="QWidget" name="tableCard">
+     <layout class="QVBoxLayout" name="tableCardLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QTableWidget" name="remindersTable">
+        <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
+        <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+        <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+        <property name="showGrid"><bool>false</bool></property>
+        <property name="alternatingRowColors"><bool>false</bool></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+</ui>

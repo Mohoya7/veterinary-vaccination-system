@@ -19,6 +19,8 @@ qt_add_executable(VetProject
     vaccinationswidget.h vaccinationswidget.cpp vaccinationswidget.ui
     styledmessagebox.h styledmessagebox.cpp
     icons/chevron-down.svg
+    reminderswidget.h reminderswidget.cpp reminderswidget.ui
+    animalswidget.h animalswidget.cpp animalswidget.ui
 )
 qt_add_resources(VetProject "resources"
     PREFIX "/"

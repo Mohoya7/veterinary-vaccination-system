@@ -13,6 +13,7 @@ QT_END_NAMESPACE
 class DashboardWidget;
 class OwnersWidget;
 class VaccinationsWidget;
+class RemindersWidget;
 
 
 class MainWindow : public QMainWindow
@@ -36,10 +37,11 @@ private:
     Ui::MainWindow     *ui;
     QString             m_role;
     bool                m_sidebarExpanded = true;
-    QPropertyAnimation *m_sidebarAnim    = nullptr;
-    DashboardWidget    *m_dashboard      = nullptr;
-    OwnersWidget       *m_owners         = nullptr;
-    VaccinationsWidget *m_vaccinations = nullptr;
+    QPropertyAnimation *m_sidebarAnim     = nullptr;
+    DashboardWidget    *m_dashboard       = nullptr;
+    OwnersWidget       *m_owners          = nullptr;
+    RemindersWidget    *m_reminders       = nullptr;
+    VaccinationsWidget *m_vaccinations    = nullptr;
 
 
     static constexpr int kSidebarExpanded  = 220;

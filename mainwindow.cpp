@@ -3,7 +3,7 @@
 #include "dashboardwidget.h"
 #include "ownerswidget.h"
 #include "vaccinationswidget.h"
-#include "styledmessagebox.h"
+#include "reminderswidget.h"
 
 #include <QPainter>
 #include <QIcon>
@@ -187,25 +187,25 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
 
     updateToggleIcon();
 
-    // ── Setup content stack pages ──────────────────────────────────────────
-    // Clear any pages already added via .ui file
+    // Clear pages added via .ui file
     while (ui->contentStack->count() > 0)
         ui->contentStack->removeWidget(ui->contentStack->widget(0));
 
     m_dashboard = new DashboardWidget(this);
-    ui->contentStack->addWidget(m_dashboard);          // index 0 - Dashboard
+    ui->contentStack->addWidget(m_dashboard);        // index 0 - Dashboard
 
-    ui->contentStack->addWidget(new QWidget(this));    // index 1 - Animals placeholder
+    ui->contentStack->addWidget(new QWidget(this));  // index 1 - Animals placeholder
 
     m_owners = new OwnersWidget(this);
-    ui->contentStack->addWidget(m_owners);              // index 2 - Owners
+    ui->contentStack->addWidget(m_owners);            // index 2 - Owners
 
-    ui->contentStack->addWidget(new QWidget(this));    // index 3 - Reminders placeholder
+    m_reminders = new RemindersWidget(this);
+    ui->contentStack->addWidget(m_reminders);         // index 3 - Reminders
 
     m_vaccinations = new VaccinationsWidget(this);
-    ui->contentStack->addWidget(m_vaccinations);        // index 4 - Vaccinations
+    ui->contentStack->addWidget(m_vaccinations);      // index 4 - Vaccinations
 
-    ui->contentStack->addWidget(new QWidget(this));    // index 5 - Settings placeholder
+    ui->contentStack->addWidget(new QWidget(this));  // index 5 - Settings placeholder
 
     ui->contentStack->setCurrentIndex(0);
 }
@@ -242,7 +242,6 @@ void MainWindow::onToggleSidebar()
 
 void MainWindow::updateToggleIcon()
 {
-    // Draw hamburger icon (3 lines)
     QPixmap pixmap(16, 16);
     pixmap.fill(Qt::transparent);
     QPainter p(&pixmap);

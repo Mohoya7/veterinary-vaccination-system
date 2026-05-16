@@ -15,7 +15,6 @@
    <property name="rightMargin"><number>24</number></property>
    <property name="bottomMargin"><number>24</number></property>
 
-   <!-- Page title -->
    <item>
     <widget class="QLabel" name="pageTitle">
      <property name="text"><string>داشبورد</string></property>
@@ -23,12 +22,9 @@
     </widget>
    </item>
 
-   <!-- Stats cards row -->
    <item>
     <layout class="QHBoxLayout" name="cardsLayout">
      <property name="spacing"><number>12</number></property>
-
-     <!-- Reminder card -->
      <item>
       <widget class="QWidget" name="reminderCard">
        <property name="minimumHeight"><number>88</number></property>
@@ -53,8 +49,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- Owner card -->
      <item>
       <widget class="QWidget" name="ownerCard">
        <property name="minimumHeight"><number>88</number></property>
@@ -79,8 +73,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- Animal card -->
      <item>
       <widget class="QWidget" name="animalCard">
        <property name="minimumHeight"><number>88</number></property>
@@ -105,11 +97,9 @@
        </layout>
       </widget>
      </item>
-
     </layout>
    </item>
 
-   <!-- Table card -->
    <item>
     <widget class="QWidget" name="tableCard">
      <layout class="QVBoxLayout" name="tableCardLayout">
@@ -141,13 +131,6 @@
       </item>
      </layout>
     </widget>
-   </item>
-
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation"><enum>Qt::Vertical</enum></property>
-     <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
-    </spacer>
    </item>
 
   </layout>

@@ -6,6 +6,7 @@
 #include <QTableWidgetItem>
 #include <QHeaderView>
 #include <QLabel>
+#include <QScrollBar>
 #include <QHBoxLayout>
 
 DashboardWidget::DashboardWidget(QWidget *parent)
@@ -245,14 +246,26 @@ void DashboardWidget::loadTodayReminders()
         row++;
     }
 
-    // Hide scrollbar
-    tbl->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tbl->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     tbl->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    tbl->verticalScrollBar()->setStyleSheet(R"(
+    QScrollBar:vertical {
+        background: transparent;
+        width: 6px;
+        border-radius: 3px;
+        margin: 0px;
+    }
+    QScrollBar::handle:vertical {
+        background: rgba(100,170,80,180);
+        border-radius: 3px;
+        min-height: 30px;
+    }
+    QScrollBar::handle:vertical:hover { background: rgba(46,125,50,220); }
+    QScrollBar::add-line:vertical,
+    QScrollBar::sub-line:vertical { height: 0px; }
+    QScrollBar::add-page:vertical,
+    QScrollBar::sub-page:vertical { background: transparent; }
+)");
 
-    // Dynamic height based on row count
-    int totalHeight = tbl->horizontalHeader()->height();
-    for (int i = 0; i < tbl->rowCount(); i++)
-        totalHeight += tbl->rowHeight(i);
-    tbl->setMinimumHeight(totalHeight);
-    tbl->setMaximumHeight(totalHeight);
 }
