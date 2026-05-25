@@ -14,6 +14,8 @@ class DashboardWidget;
 class OwnersWidget;
 class VaccinationsWidget;
 class RemindersWidget;
+class AnimalsWidget;
+
 
 
 class MainWindow : public QMainWindow
@@ -42,6 +44,7 @@ private:
     OwnersWidget       *m_owners          = nullptr;
     RemindersWidget    *m_reminders       = nullptr;
     VaccinationsWidget *m_vaccinations    = nullptr;
+    AnimalsWidget *m_animals = nullptr;
 
 
     static constexpr int kSidebarExpanded  = 220;

@@ -4,6 +4,7 @@
 #include "ownerswidget.h"
 #include "vaccinationswidget.h"
 #include "reminderswidget.h"
+#include "animalswidget.h"
 
 #include <QPainter>
 #include <QIcon>
@@ -194,7 +195,8 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
     m_dashboard = new DashboardWidget(this);
     ui->contentStack->addWidget(m_dashboard);        // index 0 - Dashboard
 
-    ui->contentStack->addWidget(new QWidget(this));  // index 1 - Animals placeholder
+    m_animals = new AnimalsWidget(this);
+    ui->contentStack->addWidget(m_animals);     // index 1 - Animals placeholder
 
     m_owners = new OwnersWidget(this);
     ui->contentStack->addWidget(m_owners);            // index 2 - Owners
@@ -208,6 +210,19 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
     ui->contentStack->addWidget(new QWidget(this));  // index 5 - Settings placeholder
 
     ui->contentStack->setCurrentIndex(0);
+
+    connect(m_animals, &AnimalsWidget::navigateToOwner, this, [this](int ownerId) {
+        ui->btnOwners->click();
+        m_owners->showOwnerById(ownerId);
+    });
+    connect(m_animals, &AnimalsWidget::navigateToVaccination, this, [this](int vacId) {
+        ui->btnVaccinations->click();
+        m_vaccinations->showVaccinationById(vacId);
+    });
+    connect(m_owners, &OwnersWidget::navigateToAnimal, this, [this](int animalId) {
+        ui->btnAnimals->click();
+        m_animals->showAnimalById(animalId);
+    });
 }
 
 MainWindow::~MainWindow()

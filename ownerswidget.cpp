@@ -53,6 +53,7 @@ public:
         lay->addStretch();
         lay->addWidget(phoneL);
     }
+
 };
 
 OwnersWidget::OwnersWidget(QWidget *parent)
@@ -177,6 +178,19 @@ OwnersWidget::~OwnersWidget() { delete ui; }
 
 void OwnersWidget::loadData() { loadOwners(); }
 
+void OwnersWidget::showOwnerById(int ownerId)
+{
+    m_selectedOwnerId = ownerId;
+    loadOwners();
+    for (int i = 0; i < ui->ownerListWidget->count(); i++) {
+        if (ui->ownerListWidget->item(i)->data(Qt::UserRole).toInt() == ownerId) {
+            ui->ownerListWidget->setCurrentRow(i);
+            return;
+        }
+    }
+    showOwnerProfile(ownerId);
+}
+
 void OwnersWidget::onSearchChanged(const QString& text)
 {
     loadOwners(text.trimmed());
@@ -184,25 +198,51 @@ void OwnersWidget::onSearchChanged(const QString& text)
 
 void OwnersWidget::loadOwners(const QString& filter)
 {
+    m_currentOffset = 0;
     ui->ownerListWidget->clear();
 
+    // حذف دکمه قدیمی از layout
+    if (m_loadMoreBtn) {
+        auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+        if (lay) lay->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+
+    appendOwners(filter, 0);
+}
+
+void OwnersWidget::appendOwners(const QString& filter, int offset)
+{
+
+    QString sql =
+        "SELECT id, first_name, last_name, phone FROM owners "
+        "WHERE is_deleted = FALSE ";
+
+    if (!filter.isEmpty())
+        sql += "AND (CONCAT(first_name,' ',last_name) LIKE :f OR phone LIKE :f2) ";
+
+    sql += QString("ORDER BY first_name LIMIT %1 OFFSET %2")
+               .arg(m_pageSize + 1)
+               .arg(offset);
+
     QSqlQuery q;
-    if (filter.isEmpty()) {
-        q.prepare("SELECT id, first_name, last_name, phone FROM owners "
-                  "WHERE is_deleted = FALSE ORDER BY first_name");
-    } else {
-        q.prepare("SELECT id, first_name, last_name, phone FROM owners "
-                  "WHERE is_deleted = FALSE AND ("
-                  "CONCAT(first_name,' ',last_name) LIKE :f OR phone LIKE :f2) "
-                  "ORDER BY first_name");
-        q.bindValue(":f",  "%" + filter + "%");
-        q.bindValue(":f2", "%" + filter + "%");
+    q.prepare(sql);
+    if (!filter.isEmpty()) {
+        QString like = "%" + filter + "%";
+        q.bindValue(":f",  like);
+        q.bindValue(":f2", like);
     }
     q.exec();
 
+    int fetched = 0;
     while (q.next()) {
-        int     id    = q.value("id").toInt();
-        QString name  = q.value("first_name").toString() + " " + q.value("last_name").toString();
+        fetched++;
+        if (fetched > m_pageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+
+        int id        = q.value("id").toInt();
+        QString name  = q.value("first_name").toString()
+                       + " " + q.value("last_name").toString();
         QString phone = q.value("phone").toString();
 
         auto* item = new QListWidgetItem(ui->ownerListWidget);
@@ -214,6 +254,51 @@ void OwnersWidget::loadOwners(const QString& filter)
 
         if (id == m_selectedOwnerId)
             ui->ownerListWidget->setCurrentItem(item);
+    }
+
+    bool hasMore = (fetched > m_pageSize);
+    if (hasMore)
+        m_currentOffset = offset + m_pageSize;
+    else
+        m_currentOffset = offset + fetched;
+
+    auto* panelLayout = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+
+    if (hasMore) {
+        if (!m_loadMoreBtn) {
+            m_loadMoreBtn = new QPushButton(
+                QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_currentOffset));
+            m_loadMoreBtn->setStyleSheet(R"(
+                QPushButton {
+                    background: #F1F8E9;
+                    border: none;
+                    border-top: 0.5px solid #C8E6C9;
+                    color: #2E7D32;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 10px;
+                }
+                QPushButton:hover { background: #E8F5E9; }
+                QPushButton:pressed { background: #C8E6C9; }
+            )");
+            int insertIdx = panelLayout ? panelLayout->count() - 1 : -1;
+            if (panelLayout && insertIdx >= 0)
+                panelLayout->insertWidget(insertIdx, m_loadMoreBtn);
+            else if (panelLayout)
+                panelLayout->addWidget(m_loadMoreBtn);
+            connect(m_loadMoreBtn, &QPushButton::clicked, this, [this]() {
+                appendOwners(ui->searchEdit->text().trimmed(), m_currentOffset);
+            });
+        } else {
+            m_loadMoreBtn->setText(
+                QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_currentOffset));
+        }
+    } else {
+        if (m_loadMoreBtn) {
+            if (panelLayout) panelLayout->removeWidget(m_loadMoreBtn);
+            m_loadMoreBtn->deleteLater();
+            m_loadMoreBtn = nullptr;
+        }
     }
 }
 

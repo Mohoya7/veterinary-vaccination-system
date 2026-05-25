@@ -74,6 +74,70 @@ void VaccinationsWidget::loadData()
     loadTable();
 }
 
+void VaccinationsWidget::showVaccinationById(int vacId)
+{
+    // فیلترها رو دست نمی‌زنیم — فقط جدول رو با اون یه رکورد پر می‌کنیم
+    auto* tbl = ui->vaccinationsTable;
+    tbl->setRowCount(0);
+
+    // حذف دکمه نمایش بیشتر اگه بود
+    if (m_loadMoreBtn) {
+        auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
+        if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+
+    QSqlQuery q;
+    q.prepare(
+        "SELECT v.id, a.name AS animal_name, a.type AS animal_type, "
+        "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
+        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
+        "FROM vaccinations v "
+        "JOIN animals a        ON v.animal_id        = a.id "
+        "JOIN owners  o        ON a.owner_id          = o.id "
+        "JOIN vaccine_types vt ON v.vaccine_type_id   = vt.id "
+        "WHERE v.id = :id AND v.is_deleted = FALSE"
+        );
+    q.bindValue(":id", vacId);
+    if (!q.exec() || !q.next()) return;
+
+    QDate today = QDate::currentDate();
+
+    auto makeItem = [](const QString& text) {
+        auto* item = new QTableWidgetItem(text);
+        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        return item;
+    };
+
+    tbl->insertRow(0);
+    tbl->setRowHeight(0, 44);
+
+    bool    isDog       = (q.value("animal_type").toString() == "dog");
+    QDate   vacDate     = q.value("vaccinated_at").toDate();
+    QDate   nextDate    = q.value("next_reminder_at").toDate();
+
+    QString statusText, statusBg, statusFg;
+    if      (nextDate < today)  { statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828"; }
+    else if (nextDate == today) { statusText = "موعد رسیده"; statusBg = "#FFF9C4"; statusFg = "#F57F17"; }
+    else                        { statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32"; }
+
+    tbl->setItem(0, 0, makeItem(q.value("animal_name").toString()));
+    tbl->setCellWidget(0, 1, makeBadge(
+                                 isDog ? "سگ" : "گربه",
+                                 isDog ? "#E8F5E9" : "#FFF3E0",
+                                 isDog ? "#1B5E20" : "#BF360C"));
+    tbl->setItem(0, 2, makeItem(q.value("owner_name").toString()));
+    auto* phoneItem = new QTableWidgetItem(q.value("phone").toString());
+    phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    tbl->setItem(0, 3, phoneItem);
+    tbl->setItem(0, 4, makeItem(q.value("vaccine_name").toString()));
+    tbl->setItem(0, 5, makeItem(vacDate.toString("yyyy/MM/dd")));
+    tbl->setItem(0, 6, makeItem(nextDate.toString("yyyy/MM/dd")));
+    tbl->setCellWidget(0, 7, makeBadge(statusText, statusBg, statusFg));
+    tbl->setCellWidget(0, 8, makeActionButtons(vacId));
+}
+
 //  applyStyle
 void VaccinationsWidget::applyStyle()
 {
@@ -193,7 +257,7 @@ void VaccinationsWidget::applyStyle()
     ui->singleDateEdit->setStyleSheet(dateStyle);
 
 
-;
+    ;
 
     setStyleSheet(R"(
         QWidget { background: transparent; }
@@ -433,7 +497,70 @@ void VaccinationsWidget::loadStats()
     if (q.next()) ui->lblOverdueCount->setText(q.value(0).toString());
 }
 
-//  loadTable
+//  buildWhereClause — بدون LIMIT، مشترک بین loadTable و PDF
+QString VaccinationsWidget::buildWhereClause() const
+{
+    QString search       = ui->searchEdit->text().trimmed();
+    int     animalTypeIdx = ui->animalTypeCombo->currentIndex();
+    int     statusIdx    = ui->statusCombo->currentIndex();
+    int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+
+    QString where =
+        "WHERE v.is_deleted = FALSE "
+        "AND a.is_deleted   = FALSE "
+        "AND o.is_deleted   = FALSE ";
+
+    if (!search.isEmpty())
+        where += "AND (a.name LIKE :search "
+                 "OR o.phone LIKE :search2 "
+                 "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
+
+    if      (animalTypeIdx == 1) where += "AND a.type = 'dog' ";
+    else if (animalTypeIdx == 2) where += "AND a.type = 'cat' ";
+
+    if (vaccineTypeId > 0)
+        where += "AND v.vaccine_type_id = :vtid ";
+
+    if (!m_rangeMode)
+        where += "AND v.vaccinated_at = :single ";
+    else
+        where += "AND v.vaccinated_at BETWEEN :dfrom AND :dto ";
+
+    // وضعیت — در کوئری اصلی فیلتر می‌کنیم تا pagination درست باشه
+    QDate today = QDate::currentDate();
+    if (statusIdx == 1)      // موعد رسیده
+        where += QString("AND v.next_reminder_at = '%1' ").arg(today.toString("yyyy-MM-dd"));
+    else if (statusIdx == 2) // تمدید شده
+        where += QString("AND v.next_reminder_at > '%1' ").arg(today.toString("yyyy-MM-dd"));
+    else if (statusIdx == 3) // تأخیر دارد
+        where += QString("AND v.next_reminder_at < '%1' ").arg(today.toString("yyyy-MM-dd"));
+
+    return where;
+}
+
+void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
+{
+    QString search       = ui->searchEdit->text().trimmed();
+    int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+
+    if (!search.isEmpty()) {
+        QString like = "%" + search + "%";
+        q.bindValue(":search",  like);
+        q.bindValue(":search2", like);
+        q.bindValue(":search3", like);
+    }
+    if (vaccineTypeId > 0)
+        q.bindValue(":vtid", vaccineTypeId);
+
+    if (!m_rangeMode)
+        q.bindValue(":single", ui->singleDateEdit->date().toString("yyyy-MM-dd"));
+    else {
+        q.bindValue(":dfrom", ui->dateFromEdit->date().toString("yyyy-MM-dd"));
+        q.bindValue(":dto",   ui->dateToEdit->date().toString("yyyy-MM-dd"));
+    }
+}
+
+//  loadTable — reset + first page
 void VaccinationsWidget::loadTable()
 {
     auto* tbl = ui->vaccinationsTable;
@@ -451,7 +578,6 @@ void VaccinationsWidget::loadTable()
     hv->setLayoutDirection(Qt::RightToLeft);
     hv->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     hv->setSectionResizeMode(QHeaderView::Stretch);
-
     hv->setSectionResizeMode(8, QHeaderView::Fixed);
     tbl->setColumnWidth(8, 150);
 
@@ -462,7 +588,6 @@ void VaccinationsWidget::loadTable()
     tbl->setFocusPolicy(Qt::NoFocus);
     tbl->setAlternatingRowColors(false);
 
-    // scrollbar
     tbl->verticalScrollBar()->setStyleSheet(R"(
         QScrollBar:vertical {
             background: transparent; width: 6px;
@@ -479,11 +604,24 @@ void VaccinationsWidget::loadTable()
         QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
-    // Create a query
-    QString search       = ui->searchEdit->text().trimmed();
-    int     animalTypeIdx = ui->animalTypeCombo->currentIndex();
-    int     statusIdx    = ui->statusCombo->currentIndex();
-    int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+    tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    // حذف دکمه نمایش بیشتر قدیمی — دقیقاً مثل reminders
+    if (m_loadMoreBtn) {
+        auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
+        if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+
+    m_offset = 0;
+    appendRows(0);
+}
+
+//  appendRows — یک صفحه اضافه می‌کند
+void VaccinationsWidget::appendRows(int offset)
+{
+    auto* tbl = ui->vaccinationsTable;
 
     QString sql =
         "SELECT DISTINCT v.id, a.name AS animal_name, a.type AS animal_type, "
@@ -493,53 +631,31 @@ void VaccinationsWidget::loadTable()
         "JOIN animals a      ON v.animal_id        = a.id "
         "JOIN owners  o      ON a.owner_id          = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
-        "WHERE v.is_deleted = FALSE "
-        "AND a.is_deleted   = FALSE "
-        "AND o.is_deleted   = FALSE ";
-
-    if (!search.isEmpty())
-        sql += "AND (a.name LIKE :search "
-               "OR o.phone LIKE :search2 "
-               "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
-
-    if      (animalTypeIdx == 1) sql += "AND a.type = 'dog' ";
-    else if (animalTypeIdx == 2) sql += "AND a.type = 'cat' ";
-
-    if (vaccineTypeId > 0)
-        sql += "AND v.vaccine_type_id = :vtid ";
-
-    if (!m_rangeMode)
-        sql += "AND v.vaccinated_at = :single ";
-    else
-        sql += "AND v.vaccinated_at BETWEEN :dfrom AND :dto ";
-
-    sql += "ORDER BY v.vaccinated_at DESC";
+        + buildWhereClause()
+        + "ORDER BY v.vaccinated_at DESC "
+          "LIMIT :limit OFFSET :offset";
 
     QSqlQuery q;
     q.prepare(sql);
-
-    if (!search.isEmpty()) {
-        QString like = "%" + search + "%";
-        q.bindValue(":search",  like);
-        q.bindValue(":search2", like);
-        q.bindValue(":search3", like);
-    }
-    if (vaccineTypeId > 0)
-        q.bindValue(":vtid", vaccineTypeId);
-
-    if (!m_rangeMode)
-        q.bindValue(":single", ui->singleDateEdit->date().toString("yyyy-MM-dd"));
-    else {
-        q.bindValue(":dfrom", ui->dateFromEdit->date().toString("yyyy-MM-dd"));
-        q.bindValue(":dto",   ui->dateToEdit->date().toString("yyyy-MM-dd"));
-    }
-
+    bindWhereParams(q);
+    q.bindValue(":limit",  kPageSize + 1); // یه تا اضافه تا بفهمیم صفحه بعدی هست
+    q.bindValue(":offset", offset);
     if (!q.exec()) return;
 
-    int  row   = 0;
-    QDate today = QDate::currentDate();
+    QDate today    = QDate::currentDate();
+    int   startRow = tbl->rowCount();
+    int   fetched  = 0;
+
+    auto makeItem = [](const QString& text) {
+        auto* item = new QTableWidgetItem(text);
+        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        return item;
+    };
 
     while (q.next()) {
+        fetched++;
+        if (fetched > kPageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+
         int     vacId       = q.value("id").toInt();
         QString animalName  = q.value("animal_name").toString();
         QString animalType  = q.value("animal_type").toString();
@@ -549,7 +665,6 @@ void VaccinationsWidget::loadTable()
         QDate   vacDate     = q.value("vaccinated_at").toDate();
         QDate   nextDate    = q.value("next_reminder_at").toDate();
 
-        // status
         QString statusText, statusBg, statusFg;
         if (nextDate < today) {
             statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828";
@@ -559,48 +674,71 @@ void VaccinationsWidget::loadTable()
             statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32";
         }
 
-        // filter status
-        if (statusIdx == 1 && statusText != "موعد رسیده") continue;
-        if (statusIdx == 2 && statusText != "تمدید شده")  continue;
-        if (statusIdx == 3 && statusText != "تأخیر دارد") continue;
-
+        int row = startRow + (fetched - 1);
         tbl->insertRow(row);
         tbl->setRowHeight(row, 44);
 
         bool isDog = (animalType == "dog");
 
-        // helper
-        auto makeItem = [](const QString& text) {
-            auto* item = new QTableWidgetItem(text);
-            item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-            return item;
-        };
-
         tbl->setItem(row, 0, makeItem(animalName));
-
         tbl->setCellWidget(row, 1, makeBadge(
                                        isDog ? "سگ" : "گربه",
                                        isDog ? "#E8F5E9" : "#FFF3E0",
                                        isDog ? "#1B5E20" : "#BF360C"));
-
         tbl->setItem(row, 2, makeItem(ownerName));
-
-        // number
         auto* phoneItem = new QTableWidgetItem(phone);
         phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         tbl->setItem(row, 3, phoneItem);
-
         tbl->setItem(row, 4, makeItem(vaccineName));
         tbl->setItem(row, 5, makeItem(vacDate.toString("yyyy/MM/dd")));
         tbl->setItem(row, 6, makeItem(nextDate.toString("yyyy/MM/dd")));
-
         tbl->setCellWidget(row, 7, makeBadge(statusText, statusBg, statusFg));
         tbl->setCellWidget(row, 8, makeActionButtons(vacId));
-
-        row++;
     }
 
-    tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    bool hasMore = (fetched > kPageSize);
+    if (hasMore)
+        m_offset = offset + kPageSize;
+    else
+        m_offset = offset + fetched;
+
+    // مدیریت دکمه نمایش بیشتر — دقیقاً مثل reminders
+    auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
+
+    if (hasMore) {
+        if (!m_loadMoreBtn) {
+            m_loadMoreBtn = new QPushButton(
+                QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_offset));
+            m_loadMoreBtn->setStyleSheet(R"(
+                QPushButton {
+                    background: #F1F8E9;
+                    border: none;
+                    border-top: 0.5px solid #C8E6C9;
+                    border-bottom-left-radius: 10px;
+                    border-bottom-right-radius: 10px;
+                    color: #2E7D32;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 10px;
+                }
+                QPushButton:hover { background: #E8F5E9; }
+                QPushButton:pressed { background: #C8E6C9; }
+            )");
+            if (cardLayout) cardLayout->addWidget(m_loadMoreBtn);
+            connect(m_loadMoreBtn, &QPushButton::clicked, this, [this]() {
+                appendRows(m_offset);
+            });
+        } else {
+            m_loadMoreBtn->setText(
+                QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_offset));
+        }
+    } else {
+        if (m_loadMoreBtn) {
+            if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+            m_loadMoreBtn->deleteLater();
+            m_loadMoreBtn = nullptr;
+        }
+    }
 }
 
 

@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QListWidgetItem>
+#include <QPushButton>
 
 namespace Ui { class OwnersWidget; }
 
@@ -14,6 +15,7 @@ public:
     explicit OwnersWidget(QWidget *parent = nullptr);
     ~OwnersWidget();
     void loadData();
+    void showOwnerById(int ownerId);
 
 signals:
     void navigateToAnimal(int animalId);
@@ -36,6 +38,12 @@ private:
 
     Ui::OwnersWidget *ui;
     int m_selectedOwnerId = -1;
+    int m_currentOffset  = 0;
+    static constexpr int m_pageSize = 50;
+    bool m_hasMore       = false;
+    QPushButton* m_loadMoreBtn = nullptr;
+
+    void appendOwners(const QString& filter, int offset);
 };
 
 #endif
