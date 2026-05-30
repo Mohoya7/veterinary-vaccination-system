@@ -1,6 +1,7 @@
 #include "addanimaldialog.h"
 #include "ui_addanimaldialog.h"
 #include "styledmessagebox.h"
+#include "database.h"
 #include <QSqlQuery>
 #include <QMessageBox>
 #include <QDate>
@@ -70,19 +71,23 @@ void AddAnimalDialog::onSaveClicked()
         return;
     }
 
-    QString type   = (ui->typeCombo->currentIndex() == 0) ? "dog" : "cat";
-    QString gender = (ui->genderCombo->currentIndex() == 0) ? "male" : "female";
+    // typeCombo: itemData حاوی id از animal_types
+    int    animalTypeId = ui->typeCombo->currentData().toInt();
+    QString gender      = (ui->genderCombo->currentIndex() == 0) ? "male" : "female";
+
+    // ساخت شماره پرونده بر اساس animal_type_id
+    QString fileNumber = Database::generateFileNumber(animalTypeId);
 
     QSqlQuery q;
-    q.prepare("INSERT INTO animals (name, type, breed, birth_date, gender, weight, owner_id) "
-              "VALUES (:name, :type, :breed, :bdate, :gender, :weight, :owner)");
-    q.bindValue(":name",   name);
-    q.bindValue(":type",   type);
-    q.bindValue(":breed",  ui->breedEdit->text().trimmed());
-    q.bindValue(":bdate",  ui->birthDateEdit->date().toString("yyyy-MM-dd"));
+    q.prepare("INSERT INTO animals (file_number, name, animal_type_id, breed, birth_date, gender, owner_id) "
+              "VALUES (:fnum, :name, :atid, :breed, :bdate, :gender, :owner)");
+    q.bindValue(":fnum",  fileNumber);
+    q.bindValue(":name",  name);
+    q.bindValue(":atid",  animalTypeId);
+    q.bindValue(":breed", ui->breedEdit->text().trimmed());
+    q.bindValue(":bdate", ui->birthDateEdit->date().toString("yyyy-MM-dd"));
     q.bindValue(":gender", gender);
-    q.bindValue(":weight", ui->weightSpin->value());
-    q.bindValue(":owner",  m_ownerId);
+    q.bindValue(":owner", m_ownerId);
 
     if (!q.exec()) {
         QMessageBox::critical(this, "خطا", "خطا در ثبت حیوان.");
@@ -90,5 +95,6 @@ void AddAnimalDialog::onSaveClicked()
     }
 
     m_savedAnimalId = q.lastInsertId().toInt();
+    m_savedFileNumber = fileNumber; // این رو به header اضافه کن
     accept();
 }

@@ -20,7 +20,6 @@ public:
 
 signals:
     void navigateToOwner(int ownerId);
-    void navigateToVaccination(int animalId);
 
 private slots:
     void onSearchChanged(const QString& text);

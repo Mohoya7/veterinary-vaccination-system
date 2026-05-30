@@ -29,7 +29,7 @@ private:
     Ui::AddVaccineDialog *ui;
     int m_animalId      = -1;
     int m_vaccinationId = -1; // -1 = add mode
-    QString m_animalType;
+    int m_animalTypeId = -1;
     QMap<int, int> m_typeIdToDefaultDays;
 };
 

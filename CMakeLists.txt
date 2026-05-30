@@ -21,6 +21,10 @@ qt_add_executable(VetProject
     icons/chevron-down.svg
     reminderswidget.h reminderswidget.cpp reminderswidget.ui
     animalswidget.h animalswidget.cpp animalswidget.ui
+    persiandate.h
+    animaltypeinfo.h
+
+
 )
 qt_add_resources(VetProject "resources"
     PREFIX "/"

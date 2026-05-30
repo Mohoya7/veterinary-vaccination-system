@@ -1,8 +1,10 @@
 #include "animalswidget.h"
+#include <functional>
 #include "ui_animalswidget.h"
 #include "addanimaldialog.h"
 #include "addvaccinedialog.h"
 #include "styledmessagebox.h"
+#include "persiandate.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -25,7 +27,7 @@ public:
         : QWidget(parent)
     {
         setFixedHeight(56);
-        setLayoutDirection(Qt::RightToLeft);
+        setLayoutDirection(Qt::LeftToRight);
 
         auto* lay = new QHBoxLayout(this);
         lay->setContentsMargins(14, 8, 14, 8);
@@ -75,6 +77,26 @@ AnimalsWidget::AnimalsWidget(QWidget *parent)
 
     ui->profileWidget->hide();
 
+    // Green scrollbar for animal list
+    ui->animalListWidget->verticalScrollBar()->setStyleSheet(R"(
+        QScrollBar:vertical {
+            background: #F5F5F5;
+            width: 9px;
+            border-radius: 3px;
+            margin: 2px;
+        }
+        QScrollBar::handle:vertical {
+            background: #A5D6A7;
+            border-radius: 3px;
+            min-height: 30px;
+        }
+        QScrollBar::handle:vertical:hover { background: #2E7D32; }
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical { height: 0px; }
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical { background: transparent; }
+    )");
+
     connect(ui->searchEdit,      &QLineEdit::textChanged,
             this, &AnimalsWidget::onSearchChanged);
     connect(ui->typeFilterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -121,12 +143,49 @@ void AnimalsWidget::applyStyle()
         QLineEdit#searchEdit:focus { border-color: #2E7D32; background: white; }
 
         QComboBox#typeFilterCombo {
-            background: #F5F5F5;
-            border: 0.5px solid #E0E0E0;
-            border-radius: 6px;
+            background: #FBFFF7;
+            border: 1px solid #A5D6A7;
+            border-radius: 8px;
             padding: 5px 10px;
-            font-size: 12px; color: #212121;
+            font-size: 13px;
+            color: #2E7D32;
+            font-weight: 500;
+            min-height: 32px;
+        }
+        QComboBox#typeFilterCombo:hover {
+            background: #E8F5E9;
+            border-color: #2E7D32;
+        }
+        QComboBox#typeFilterCombo::drop-down {
+            border: none;
+            width: 24px;
+            subcontrol-origin: padding;
+            subcontrol-position: left center;
+        }
+        QComboBox#typeFilterCombo::down-arrow {
+            image: url(:/icons/chevron-down.svg);
+            width: 14px;
+            height: 14px;
+        }
+        QComboBox#typeFilterCombo QAbstractItemView {
+            background: white;
+            border: 1px solid #C8E6C9;
+            border-radius: 8px;
+            selection-background-color: #E8F5E9;
+            selection-color: #1B5E20;
+            font-size: 13px;
+            padding: 4px;
+            outline: none;
+        }
+        QComboBox#typeFilterCombo QAbstractItemView::item {
+            padding: 8px 12px;
             min-height: 30px;
+            border-radius: 4px;
+            color: #212121;
+        }
+        QComboBox#typeFilterCombo QAbstractItemView::item:selected {
+            background: #E8F5E9;
+            color: #2E7D32;
         }
         QComboBox#typeFilterCombo QAbstractItemView {
             background: white;
@@ -202,7 +261,7 @@ void AnimalsWidget::applyStyle()
             border-radius: 8px;
             font-size: 13px; font-weight: 500;
             color: #2E7D32;
-            text-align: right;
+            text-align: left;
             padding: 0 12px;
         }
         QPushButton#btnGoToOwner:hover { background: #E8F5E9; border-color: #2E7D32; }
@@ -247,8 +306,7 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
     QString sql =
         "SELECT a.id, a.name, a.type, a.breed "
         "FROM animals a "
-        "JOIN owners o ON a.owner_id = o.id "
-        "WHERE a.is_deleted = FALSE ";
+        "JOIN owners o ON a.owner_id = o.id ";
 
     if (!search.isEmpty())
         sql += "AND (a.name LIKE :s OR o.phone LIKE :s2 "
@@ -350,7 +408,7 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
     QSqlQuery q;
     q.prepare(
-        "SELECT a.name, a.type, a.breed, a.birth_date, a.gender, a.weight, "
+        "SELECT a.name, a.type, a.breed, a.birth_date, a.gender, a.file_number, "
         "a.owner_id, CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone "
         "FROM animals a JOIN owners o ON a.owner_id = o.id "
         "WHERE a.id = :id");
@@ -366,8 +424,8 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
     // Avatar
     ui->animalAvatarLabel->setText(isDog ? "🐕" : "🐈");
-    ui->animalAvatarLabel->setStyleSheet(QString(
-        "background:rgba(255,255,255,0.18);border-radius:25px;font-size:20px;"));
+    ui->animalAvatarLabel->setStyleSheet(
+        "background:rgba(255,255,255,0.18);border-radius:25px;font-size:20px;");
 
     ui->animalNameLabel->setText(name);
 
@@ -378,17 +436,22 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
     // Info rows
     clearInfoRows();
+
+    QString fileNum = q.value("file_number").toString();
+    if (!fileNum.isEmpty())
+        addInfoRow(ui->infoRowsContainer, "شماره پرونده", fileNum);
+
     addInfoRow(ui->infoRowsContainer, "نوع", typeStr);
+
     if (!q.value("breed").toString().isEmpty())
         addInfoRow(ui->infoRowsContainer, "نژاد", q.value("breed").toString());
+
     if (!q.value("birth_date").isNull())
         addInfoRow(ui->infoRowsContainer, "تاریخ تولد",
-                   q.value("birth_date").toDate().toString("yyyy/MM/dd"));
+                   PersianDate::toDisplayShort(q.value("birth_date").toDate()));
+
     addInfoRow(ui->infoRowsContainer, "جنسیت",
                q.value("gender").toString() == "male" ? "نر" : "ماده");
-    if (!q.value("weight").isNull())
-        addInfoRow(ui->infoRowsContainer, "وزن",
-                   QString::number(q.value("weight").toDouble(), 'f', 1) + " kg");
 
     // Owner button
     QString ownerText = q.value("owner_name").toString()
@@ -396,7 +459,6 @@ void AnimalsWidget::showAnimalProfile(int animalId)
     ui->btnGoToOwner->setText(ownerText);
     ui->btnGoToOwner->setLayoutDirection(Qt::RightToLeft);
 
-    // Reconnect owner button
     disconnect(ui->btnGoToOwner, nullptr, nullptr, nullptr);
     connect(ui->btnGoToOwner, &QPushButton::clicked, this, [this]() {
         emit navigateToOwner(m_selectedOwnerId);
@@ -458,17 +520,17 @@ void AnimalsWidget::addInfoRow(QWidget* container,
     rowLay->setContentsMargins(0, 7, 0, 7);
     rowLay->setSpacing(8);
 
-    auto* valueL = new QLabel(value);
-    valueL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    valueL->setStyleSheet("font-size:12px;font-weight:500;color:#212121;background:transparent;");
-
     auto* labelL = new QLabel(label);
     labelL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    labelL->setStyleSheet("font-size:12px;color:#757575;background:transparent;");
+    labelL->setStyleSheet("font-size:12px;font-weight:500;color:#757575;background:transparent;");
 
-    rowLay->addWidget(valueL);
-    rowLay->addStretch();
+    auto* valueL = new QLabel(value);
+    valueL->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    valueL->setStyleSheet("font-size:12px;color:#212121;background:transparent;");
+
     rowLay->addWidget(labelL);
+    rowLay->addStretch();
+    rowLay->addWidget(valueL);
 
     auto* divider = new QFrame;
     divider->setFrameShape(QFrame::HLine);
@@ -486,7 +548,7 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
     QDialog histDialog(this);
     histDialog.setWindowTitle("تاریخچه واکسیناسیون");
     histDialog.setLayoutDirection(Qt::RightToLeft);
-    histDialog.setMinimumSize(700, 450);
+    histDialog.setMinimumSize(740, 480);
     histDialog.setStyleSheet(R"(
         QDialog { background: #F1F8E9; }
         QWidget#histHeader { background: #2E7D32; }
@@ -545,111 +607,143 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
     auto* tbl = new QTableWidget;
     tbl->setColumnCount(5);
     tbl->setLayoutDirection(Qt::RightToLeft);
-    QStringList headers = {"نوع واکسن", "تاریخ تزریق", "یادآوری بعدی", "وضعیت", ""};
-    tbl->setHorizontalHeaderLabels(headers);
-
+    QStringList hdrs = {"نوع واکسن", "تاریخ تزریق", "یادآوری بعدی", "وضعیت", "عملیات"};
+    tbl->setHorizontalHeaderLabels(hdrs);
     auto* hv = tbl->horizontalHeader();
     hv->setLayoutDirection(Qt::RightToLeft);
     hv->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     hv->setSectionResizeMode(QHeaderView::Stretch);
     hv->setSectionResizeMode(4, QHeaderView::Fixed);
-    tbl->setColumnWidth(4, 120);
+    tbl->setColumnWidth(4, 150);
     tbl->verticalHeader()->setVisible(false);
     tbl->setShowGrid(false);
     tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
     tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
     tbl->setFocusPolicy(Qt::NoFocus);
 
-    // Load data
-    QSqlQuery q;
-    q.prepare(
-        "SELECT v.id, vt.name AS vaccine_name, "
-        "v.vaccinated_at, v.next_reminder_at "
-        "FROM vaccinations v "
-        "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
-        "WHERE v.animal_id = :id AND v.is_deleted = FALSE "
-        "ORDER BY v.vaccinated_at DESC");
-    q.bindValue(":id", m_selectedAnimalId);
-    q.exec();
+    int animalId = m_selectedAnimalId;
 
-    int row = 0;
-    QDate today = QDate::currentDate();
-    while (q.next()) {
-        int   vacId    = q.value("id").toInt();
-        QDate vacDate  = q.value("vaccinated_at").toDate();
-        QDate nextDate = q.value("next_reminder_at").toDate();
+    // ─── helper: پر کردن جدول ────────────────────────────
+    std::function<void()> reloadTable = [&]() {
+        tbl->setRowCount(0);
 
-        QString statusText, statusBg, statusFg;
-        if (nextDate < today)       { statusText="تأخیر دارد"; statusBg="#FFEBEE"; statusFg="#C62828"; }
-        else if (nextDate == today) { statusText="موعد رسیده"; statusBg="#FFF9C4"; statusFg="#F57F17"; }
-        else                        { statusText="تمدید شده";  statusBg="#E8F5E9"; statusFg="#2E7D32"; }
+        QSqlQuery q;
+        q.prepare(
+            "SELECT v.id, vt.name AS vaccine_name, "
+            "v.vaccinated_at, v.next_reminder_at "
+            "FROM vaccinations v "
+            "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
+            "WHERE v.animal_id = :id "
+            "ORDER BY v.vaccinated_at DESC");
+        q.bindValue(":id", animalId);
+        q.exec();
 
-        tbl->insertRow(row);
-        tbl->setRowHeight(row, 42);
+        int row = 0;
+        QDate today = QDate::currentDate();
 
         auto makeItem = [](const QString& t) {
-            auto* item = new QTableWidgetItem(t);
-            item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-            return item;
+            auto* i = new QTableWidgetItem(t);
+            i->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            return i;
         };
 
-        tbl->setItem(row, 0, makeItem(q.value("vaccine_name").toString()));
-        tbl->setItem(row, 1, makeItem(vacDate.toString("yyyy/MM/dd")));
-        tbl->setItem(row, 2, makeItem(nextDate.toString("yyyy/MM/dd")));
+        auto makeBadge = [](const QString& text, const QString& bg, const QString& fg) {
+            auto* w = new QWidget; w->setStyleSheet("background:transparent;");
+            auto* l = new QHBoxLayout(w);
+            l->setContentsMargins(8, 2, 8, 2);
+            l->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            auto* lbl = new QLabel(text);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            lbl->setStyleSheet(QString(
+                                   "background:%1;color:%2;border-radius:4px;"
+                                   "font-size:11px;font-weight:500;padding:2px 8px;").arg(bg, fg));
+            l->addWidget(lbl); l->addStretch();
+            return w;
+        };
 
-        // Status badge
-        auto* badge = new QWidget;
-        badge->setStyleSheet("background:transparent;");
-        auto* badgeLay = new QHBoxLayout(badge);
-        badgeLay->setContentsMargins(8, 2, 8, 2);
-        badgeLay->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        auto* badgeLbl = new QLabel(statusText);
-        badgeLbl->setAlignment(Qt::AlignCenter);
-        badgeLbl->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        badgeLbl->setStyleSheet(QString(
-                                    "background:%1;color:%2;border-radius:4px;"
-                                    "font-size:11px;font-weight:500;padding:2px 8px;").arg(statusBg, statusFg));
-        badgeLay->addWidget(badgeLbl);
-        badgeLay->addStretch();
-        tbl->setCellWidget(row, 3, badge);
+        while (q.next()) {
+            int   vacId    = q.value("id").toInt();
+            QDate vacDate  = q.value("vaccinated_at").toDate();
+            QDate nextDate = q.value("next_reminder_at").toDate();
 
-        // Navigate button
-        auto* navBtn = new QPushButton("مشاهده در واکسن‌ها");
-        navBtn->setStyleSheet(R"(
-            QPushButton {
-                background: white; border: 0.5px solid #C8E6C9;
-                border-radius: 5px; font-size: 11px;
-                color: #2E7D32; padding: 2px 8px; min-height: 26px;
-            }
-            QPushButton:hover { background: #E8F5E9; }
-        )");
-        connect(navBtn, &QPushButton::clicked, this, [this, vacId, &histDialog]() {
-            histDialog.accept();
-            emit navigateToVaccination(vacId);
-        });
-        tbl->setCellWidget(row, 4, navBtn);
+            QString st, sb, sf;
+            if      (nextDate < today)  { st="تأخیر دارد"; sb="#FFEBEE"; sf="#C62828"; }
+            else if (nextDate == today) { st="موعد رسیده"; sb="#FFF9C4"; sf="#F57F17"; }
+            else                        { st="تمدید شده";  sb="#E8F5E9"; sf="#2E7D32"; }
 
-        row++;
-    }
+            tbl->insertRow(row);
+            tbl->setRowHeight(row, 44);
 
-    // Hint if empty
-    if (row == 0) {
-        auto* emptyL = new QLabel("واکسنی ثبت نشده است");
-        emptyL->setAlignment(Qt::AlignCenter);
-        emptyL->setStyleSheet("color:#BDBDBD;font-size:13px;");
-        bodyLay->addWidget(emptyL);
-    } else {
-        bodyLay->addWidget(tbl);
-    }
+            tbl->setItem(row, 0, makeItem(q.value("vaccine_name").toString()));
+            tbl->setItem(row, 1, makeItem(PersianDate::toDisplayShort(vacDate)));
+            tbl->setItem(row, 2, makeItem(PersianDate::toDisplayShort(nextDate)));
+            tbl->setCellWidget(row, 3, makeBadge(st, sb, sf));
+
+            // ─── دکمه‌های ویرایش و حذف ───────────────────
+            auto* actW = new QWidget; actW->setStyleSheet("background:transparent;");
+            auto* actL = new QHBoxLayout(actW);
+            actL->setContentsMargins(4, 2, 4, 2);
+            actL->setSpacing(4);
+
+            auto* editBtn = new QPushButton("ویرایش");
+            editBtn->setStyleSheet(R"(
+                QPushButton {
+                    background: white; border: 0.5px solid #C8E6C9;
+                    border-radius: 5px; font-size: 11px;
+                    color: #2E7D32; padding: 2px 8px; min-height: 26px;
+                }
+                QPushButton:hover { background: #E8F5E9; }
+            )");
+            connect(editBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
+                AddVaccineDialog dlg(animalId, vacId, &histDialog);
+                if (dlg.exec() == QDialog::Accepted)
+                    reloadTable();
+            });
+
+            auto* delBtn = new QPushButton("حذف");
+            delBtn->setStyleSheet(R"(
+                QPushButton {
+                    background: white; border: 0.5px solid #FFCDD2;
+                    border-radius: 5px; font-size: 11px;
+                    color: #C62828; padding: 2px 8px; min-height: 26px;
+                }
+                QPushButton:hover { background: #FFEBEE; }
+            )");
+            connect(delBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
+                if (!StyledMessageBox::question(&histDialog, "حذف واکسن",
+                                                "آیا از حذف این واکسن مطمئن هستید؟"))
+                    return;
+                QSqlQuery dq;
+                dq.prepare("DELETE FROM vaccinations WHERE id=:id");
+                dq.bindValue(":id", vacId);
+                if (!dq.exec()) {
+                    StyledMessageBox::error(&histDialog, "خطا", "خطا در حذف واکسن.");
+                    return;
+                }
+                reloadTable();
+            });
+
+            actL->addWidget(editBtn);
+            actL->addWidget(delBtn);
+            tbl->setCellWidget(row, 4, actW);
+
+            row++;
+        }
+    };
+    // ─────────────────────────────────────────────────────
+
+    reloadTable();
+    bodyLay->addWidget(tbl, 1);
 
     auto* btnClose = new QPushButton("بستن");
     btnClose->setFixedHeight(36);
     btnClose->setStyleSheet(R"(
         QPushButton {
-            background:#2E7D32;color:white;border:none;
-            border-radius:6px;font-size:13px;padding:0 24px;
+            background: #2E7D32; color: white; border: none;
+            border-radius: 6px; font-size: 13px; padding: 0 24px;
         }
-        QPushButton:hover{background:#1B5E20;}
+        QPushButton:hover { background: #1B5E20; }
     )");
     connect(btnClose, &QPushButton::clicked, &histDialog, &QDialog::accept);
 
@@ -738,7 +832,7 @@ void AnimalsWidget::onAddAnimalClicked()
         listW->clear();
         QSqlQuery q;
         q.prepare("SELECT id, first_name, last_name, phone FROM owners "
-                  "WHERE is_deleted=FALSE AND "
+                  "WHERE "
                   "(CONCAT(first_name,' ',last_name) LIKE :f OR phone LIKE :f2) "
                   "ORDER BY first_name LIMIT 50");
         QString f = filter.isEmpty() ? "%" : "%" + filter + "%";
@@ -811,7 +905,7 @@ void AnimalsWidget::onEditAnimalClicked()
 
     // Pre-fill animal data
     QSqlQuery aq;
-    aq.prepare("SELECT name, type, breed, birth_date, gender, weight FROM animals WHERE id=:id");
+    aq.prepare("SELECT name, type, breed, birth_date, gender FROM animals WHERE id=:id");
     aq.bindValue(":id", m_selectedAnimalId);
     aq.exec();
     if (aq.next()) {
@@ -834,15 +928,8 @@ void AnimalsWidget::onDeleteAnimalClicked()
     if (!ok) return;
 
     QSqlQuery q;
-    q.prepare("UPDATE reminder_followups rf "
-              "JOIN vaccinations v ON rf.vaccination_id=v.id "
-              "SET rf.is_resolved=TRUE WHERE v.animal_id=:id");
-    q.bindValue(":id", m_selectedAnimalId); q.exec();
-
-    q.prepare("UPDATE vaccinations SET is_deleted=TRUE, updated_at=NOW() WHERE animal_id=:id");
-    q.bindValue(":id", m_selectedAnimalId); q.exec();
-
-    q.prepare("UPDATE animals SET is_deleted=TRUE, updated_at=NOW() WHERE id=:id");
+    // CASCADE: حذف حیوان → vaccinations → reminder_followups خودکار حذف میشن
+    q.prepare("DELETE FROM animals WHERE id=:id");
     q.bindValue(":id", m_selectedAnimalId); q.exec();
 
     clearProfile();

@@ -31,7 +31,7 @@
       </item>
       <item>
        <widget class="QLabel" name="titleLabel">
-        <property name="text"><string>کلینیک دامپزشکی سلین</string></property>
+        <property name="text"><string>کلینیک دامپزشکی زیبا</string></property>
         <property name="alignment"><set>Qt::AlignCenter</set></property>
        </widget>
       </item>

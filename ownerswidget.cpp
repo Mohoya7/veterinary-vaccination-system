@@ -1,4 +1,5 @@
 #include "ownerswidget.h"
+#include "animaltypeinfo.h"
 #include "ui_ownerswidget.h"
 #include "addownerdialog.h"
 #include "addanimaldialog.h"
@@ -12,6 +13,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
+#include <QScrollBar>
 #include <QPainter>
 
 class OwnerItemWidget : public QWidget {
@@ -165,6 +167,26 @@ OwnersWidget::OwnersWidget(QWidget *parent)
 
     ui->profileWidget->hide();
 
+    // Green scrollbar for owner list
+    ui->ownerListWidget->verticalScrollBar()->setStyleSheet(R"(
+        QScrollBar:vertical {
+            background: #F5F5F5;
+            width: 9px;
+            border-radius: 3px;
+            margin: 2px;
+        }
+        QScrollBar::handle:vertical {
+            background: #A5D6A7;
+            border-radius: 3px;
+            min-height: 30px;
+        }
+        QScrollBar::handle:vertical:hover { background: #2E7D32; }
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical { height: 0px; }
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical { background: transparent; }
+    )");
+
     connect(ui->searchEdit,      &QLineEdit::textChanged,          this, &OwnersWidget::onSearchChanged);
     connect(ui->ownerListWidget, &QListWidget::currentItemChanged, this, &OwnersWidget::onOwnerSelected);
     connect(ui->btnAddOwner,     &QPushButton::clicked,            this, &OwnersWidget::onAddOwnerClicked);
@@ -217,7 +239,7 @@ void OwnersWidget::appendOwners(const QString& filter, int offset)
 
     QString sql =
         "SELECT id, first_name, last_name, phone FROM owners "
-        "WHERE is_deleted = FALSE ";
+        "WHERE TRUE ";
 
     if (!filter.isEmpty())
         sql += "AND (CONCAT(first_name,' ',last_name) LIKE :f OR phone LIKE :f2) ";
@@ -335,7 +357,7 @@ void OwnersWidget::showOwnerProfile(int ownerId)
 
     // Animal count
     QSqlQuery countQ;
-    countQ.prepare("SELECT COUNT(*) FROM animals WHERE owner_id = :id AND is_deleted = FALSE");
+    countQ.prepare("SELECT COUNT(*) FROM animals WHERE owner_id = :id");
     countQ.bindValue(":id", ownerId);
     countQ.exec();
     int animalCount = countQ.next() ? countQ.value(0).toInt() : 0;
@@ -418,7 +440,7 @@ void OwnersWidget::loadAnimals(int ownerId)
     clearAnimals();
 
     QSqlQuery q;
-    q.prepare("SELECT id, name, type FROM animals WHERE owner_id = :id AND is_deleted = FALSE");
+    q.prepare("SELECT id, name, animal_type_id FROM animals WHERE owner_id = :id");
     q.bindValue(":id", ownerId);
     q.exec();
 
@@ -521,7 +543,7 @@ void OwnersWidget::onDeleteOwnerClicked()
     if (m_selectedOwnerId < 0) return;
 
     QSqlQuery countQ;
-    countQ.prepare("SELECT COUNT(*) FROM animals WHERE owner_id = :id AND is_deleted = FALSE");
+    countQ.prepare("SELECT COUNT(*) FROM animals WHERE owner_id = :id");
     countQ.bindValue(":id", m_selectedOwnerId);
     countQ.exec();
     int animalCount = countQ.next() ? countQ.value(0).toInt() : 0;
@@ -540,16 +562,11 @@ void OwnersWidget::onDeleteOwnerClicked()
               "SET rf.is_resolved = TRUE WHERE a.owner_id = :id");
     q.bindValue(":id", m_selectedOwnerId); q.exec();
 
-    q.prepare("UPDATE vaccinations v JOIN animals a ON v.animal_id = a.id "
-              "SET v.is_deleted = TRUE WHERE a.owner_id = :id");
-    q.bindValue(":id", m_selectedOwnerId); q.exec();
-
-    q.prepare("UPDATE animals SET is_deleted = TRUE WHERE owner_id = :id");
-    q.bindValue(":id", m_selectedOwnerId); q.exec();
-
-    q.prepare("UPDATE owners SET is_deleted = TRUE WHERE id = :id");
+    q.prepare("UPDATE vaccinations v JOIN animals a ON v.animal_id = a.id ");
+    // CASCADE: حذف صاحب → animals → vaccinations → reminder_followups خودکار حذف میشن
+    q.prepare("DELETE FROM owners WHERE id = :id");
     q.bindValue(":id", m_selectedOwnerId); q.exec();
 
     clearProfile();
-    loadOwners();
+              loadOwners();
 }

@@ -24,6 +24,7 @@ private:
     Ui::AddAnimalDialog *ui;
     int m_ownerId      = -1;
     int m_savedAnimalId = -1;
+    QString m_savedFileNumber;
 };
 
 #endif

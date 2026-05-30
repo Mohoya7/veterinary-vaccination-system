@@ -1,6 +1,7 @@
 #include "vaccinationswidget.h"
 #include "ui_vaccinationswidget.h"
 #include "addvaccinedialog.h"
+#include "persiandate.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -97,7 +98,7 @@ void VaccinationsWidget::showVaccinationById(int vacId)
         "JOIN animals a        ON v.animal_id        = a.id "
         "JOIN owners  o        ON a.owner_id          = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id   = vt.id "
-        "WHERE v.id = :id AND v.is_deleted = FALSE"
+        "WHERE v.id = :id"
         );
     q.bindValue(":id", vacId);
     if (!q.exec() || !q.next()) return;
@@ -132,8 +133,8 @@ void VaccinationsWidget::showVaccinationById(int vacId)
     phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     tbl->setItem(0, 3, phoneItem);
     tbl->setItem(0, 4, makeItem(q.value("vaccine_name").toString()));
-    tbl->setItem(0, 5, makeItem(vacDate.toString("yyyy/MM/dd")));
-    tbl->setItem(0, 6, makeItem(nextDate.toString("yyyy/MM/dd")));
+    tbl->setItem(0, 5, makeItem(PersianDate::toDisplayShort(vacDate)));
+    tbl->setItem(0, 6, makeItem(PersianDate::toDisplayShort(nextDate)));
     tbl->setCellWidget(0, 7, makeBadge(statusText, statusBg, statusFg));
     tbl->setCellWidget(0, 8, makeActionButtons(vacId));
 }
@@ -418,11 +419,11 @@ void VaccinationsWidget::loadVaccineTypeCombo()
 
     QSqlQuery q;
     if (animalType.isEmpty()) {
-        q.prepare("SELECT id, name FROM vaccine_types WHERE is_active=TRUE ORDER BY name");
+        q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
     } else {
         q.prepare(
             "SELECT id, name FROM vaccine_types "
-            "WHERE is_active=TRUE AND (animal_type=:type OR animal_type='both') "
+
             "ORDER BY name"
             );
         q.bindValue(":type", animalType);
@@ -475,13 +476,13 @@ void VaccinationsWidget::loadStats()
     QSqlQuery q;
     QString today = QDate::currentDate().toString("yyyy-MM-dd");
 
-    q.exec("SELECT COUNT(*) FROM vaccinations WHERE is_deleted=FALSE");
+    q.exec("SELECT COUNT(*) FROM vaccinations");
     if (q.next()) ui->lblTotalCount->setText(q.value(0).toString());
 
     q.prepare(
         "SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
         "JOIN reminder_followups rf ON rf.vaccination_id=v.id "
-        "WHERE v.next_reminder_at=:today AND rf.is_resolved=FALSE AND v.is_deleted=FALSE"
+        "WHERE v.next_reminder_at=:today AND rf.is_resolved=FALSE"
         );
     q.bindValue(":today", today);
     q.exec();
@@ -490,7 +491,7 @@ void VaccinationsWidget::loadStats()
     q.prepare(
         "SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
         "JOIN reminder_followups rf ON rf.vaccination_id=v.id "
-        "WHERE v.next_reminder_at < :today AND rf.is_resolved=FALSE AND v.is_deleted=FALSE"
+        "WHERE v.next_reminder_at < :today AND rf.is_resolved=FALSE"
         );
     q.bindValue(":today", today);
     q.exec();
@@ -505,10 +506,7 @@ QString VaccinationsWidget::buildWhereClause() const
     int     statusIdx    = ui->statusCombo->currentIndex();
     int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
 
-    QString where =
-        "WHERE v.is_deleted = FALSE "
-        "AND a.is_deleted   = FALSE "
-        "AND o.is_deleted   = FALSE ";
+    QString where = "WHERE TRUE ";
 
     if (!search.isEmpty())
         where += "AND (a.name LIKE :search "
@@ -690,8 +688,8 @@ void VaccinationsWidget::appendRows(int offset)
         phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         tbl->setItem(row, 3, phoneItem);
         tbl->setItem(row, 4, makeItem(vaccineName));
-        tbl->setItem(row, 5, makeItem(vacDate.toString("yyyy/MM/dd")));
-        tbl->setItem(row, 6, makeItem(nextDate.toString("yyyy/MM/dd")));
+        tbl->setItem(row, 5, makeItem(PersianDate::toDisplayShort(vacDate)));
+        tbl->setItem(row, 6, makeItem(PersianDate::toDisplayShort(nextDate)));
         tbl->setCellWidget(row, 7, makeBadge(statusText, statusBg, statusFg));
         tbl->setCellWidget(row, 8, makeActionButtons(vacId));
     }
@@ -833,7 +831,7 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
         q.prepare("UPDATE reminder_followups SET is_resolved=TRUE WHERE vaccination_id=:id");
         q.bindValue(":id", vaccinationId); q.exec();
 
-        q.prepare("UPDATE vaccinations SET is_deleted=TRUE, updated_at=NOW() WHERE id=:id");
+        q.prepare("DELETE FROM vaccinations WHERE id=:id");
         q.bindValue(":id", vaccinationId); q.exec();
 
         loadData();
@@ -1003,7 +1001,7 @@ int VaccinationsWidget::showAnimalPickerDialog()
             "SELECT a.id, a.name, a.type, "
             "CONCAT(o.first_name,' ',o.last_name) AS owner, o.phone "
             "FROM animals a JOIN owners o ON a.owner_id=o.id "
-            "WHERE a.is_deleted=FALSE "
+            "WHERE TRUE "
             "AND (a.name LIKE :f OR o.first_name LIKE :f2 "
             "     OR o.last_name LIKE :f3 OR o.phone LIKE :f4) "
             "ORDER BY a.name LIMIT 60"

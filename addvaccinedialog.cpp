@@ -12,13 +12,17 @@ AddVaccineDialog::AddVaccineDialog(int animalId, QWidget *parent)
     setWindowTitle("افزودن واکسن");
 
     QSqlQuery q;
-    q.prepare("SELECT a.name, a.type, CONCAT(o.first_name,' ',o.last_name) AS owner_name "
-              "FROM animals a JOIN owners o ON a.owner_id = o.id WHERE a.id = :id");
+    q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
+              "CONCAT(o.first_name,' ',o.last_name) AS owner_name "
+              "FROM animals a "
+              "JOIN owners o ON a.owner_id = o.id "
+              "JOIN animal_types at ON a.animal_type_id = at.id "
+              "WHERE a.id = :id");
     q.bindValue(":id", animalId);
     q.exec();
     if (q.next()) {
-        m_animalType = q.value("type").toString();
-        QString typeStr = (m_animalType == "dog") ? "سگ" : "گربه";
+        m_animalTypeId = q.value("type_id").toInt();
+        QString typeStr = q.value("type_name").toString();
         ui->animalInfoLabel->setText(
             q.value("name").toString() + " | " + typeStr + " | " + q.value("owner_name").toString());
     }
@@ -44,13 +48,17 @@ AddVaccineDialog::AddVaccineDialog(int animalId, int vaccinationId, QWidget *par
     ui->btnSave->setText("ذخیره تغییرات");
 
     QSqlQuery q;
-    q.prepare("SELECT a.name, a.type, CONCAT(o.first_name,' ',o.last_name) AS owner_name "
-              "FROM animals a JOIN owners o ON a.owner_id = o.id WHERE a.id = :id");
+    q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
+              "CONCAT(o.first_name,' ',o.last_name) AS owner_name "
+              "FROM animals a "
+              "JOIN owners o ON a.owner_id = o.id "
+              "JOIN animal_types at ON a.animal_type_id = at.id "
+              "WHERE a.id = :id");
     q.bindValue(":id", animalId);
     q.exec();
     if (q.next()) {
-        m_animalType = q.value("type").toString();
-        QString typeStr = (m_animalType == "dog") ? "سگ" : "گربه";
+        m_animalTypeId = q.value("type_id").toInt();
+        QString typeStr = q.value("type_name").toString();
         ui->animalInfoLabel->setText(
             q.value("name").toString() + " | " + typeStr + " | " + q.value("owner_name").toString());
     }
@@ -70,9 +78,13 @@ AddVaccineDialog::~AddVaccineDialog() { delete ui; }
 void AddVaccineDialog::loadVaccineTypes()
 {
     QSqlQuery q;
-    q.prepare("SELECT id, name, default_reminder_days FROM vaccine_types "
-              "WHERE (animal_type = :type OR animal_type = 'both') AND is_active = TRUE");
-    q.bindValue(":type", m_animalType);
+    q.prepare(
+        "SELECT vt.id, vt.name, vt.default_reminder_days "
+        "FROM vaccine_types vt "
+        "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
+        "WHERE vta.animal_type_id = :atid "
+        "ORDER BY vt.name");
+    q.bindValue(":atid", m_animalTypeId);
     q.exec();
 
     while (q.next()) {

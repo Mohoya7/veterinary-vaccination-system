@@ -171,7 +171,7 @@
          <property name="bottomMargin"><number>14</number></property>
          <property name="spacing"><number>8</number></property>
          <item><widget class="QLabel" name="listTitle"><property name="text"><string>حیوانات</string></property></widget></item>
-         <item><widget class="QLineEdit" name="searchEdit"><property name="placeholderText"><string>جستجو نام یا شماره صاحب...</string></property></widget></item>
+         <item><widget class="QLineEdit" name="searchEdit"><property name="placeholderText"><string>جستجو نام حیوان، نام صاحب، شماره تماس</string></property></widget></item>
          <item>
           <widget class="QComboBox" name="typeFilterCombo">
            <item><property name="text"><string>همه انواع</string></property></item>

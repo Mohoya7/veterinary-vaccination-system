@@ -1,6 +1,7 @@
 #include "reminderswidget.h"
 #include "ui_reminderswidget.h"
 #include "addvaccinedialog.h"
+#include "persiandate.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -315,7 +316,7 @@ void RemindersWidget::loadStats()
     q.prepare("SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
               "JOIN reminder_followups rf ON rf.vaccination_id = v.id "
               "WHERE v.next_reminder_at = :today "
-              "AND rf.is_resolved = FALSE AND v.is_deleted = FALSE");
+              "AND rf.is_resolved = FALSE");
     q.bindValue(":today", today);
     q.exec();
     if (q.next()) ui->lblTodayCount->setText(q.value(0).toString());
@@ -323,7 +324,7 @@ void RemindersWidget::loadStats()
     q.prepare("SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
               "JOIN reminder_followups rf ON rf.vaccination_id = v.id "
               "WHERE v.next_reminder_at < :today "
-              "AND rf.is_resolved = FALSE AND v.is_deleted = FALSE");
+              "AND rf.is_resolved = FALSE");
     q.bindValue(":today", today);
     q.exec();
     if (q.next()) ui->lblOverdueCount->setText(q.value(0).toString());
@@ -331,7 +332,7 @@ void RemindersWidget::loadStats()
     q.prepare("SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
               "JOIN reminder_followups rf ON rf.vaccination_id = v.id "
               "WHERE v.next_reminder_at = :today "
-              "AND rf.is_followed_up = TRUE AND v.is_deleted = FALSE");
+              "AND rf.is_followed_up = TRUE");
     q.bindValue(":today", today);
     q.exec();
     if (q.next()) ui->lblDoneCount->setText(q.value(0).toString());
@@ -349,7 +350,7 @@ QString RemindersWidget::buildWhereClause() const
     int     followUpIdx   = ui->followUpCombo->currentIndex();
     int     responseIdx   = ui->responseCombo->currentIndex();
 
-    QString w = "WHERE rf.is_resolved = FALSE AND v.is_deleted = FALSE ";
+    QString w = "WHERE rf.is_resolved = FALSE ";
 
     if (modeToday)
         w += "AND v.next_reminder_at = :today ";
@@ -441,9 +442,8 @@ void RemindersWidget::loadTable()
         QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
-    // حذف دکمه "نمایش بیشتر" قدیمی اگه وجود داشته باشه
+    // Remove old "Show More" button if it exists
     if (m_loadMoreBtn) {
-        // از layout جداش می‌کنیم
         auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
         if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
         m_loadMoreBtn->deleteLater();
@@ -477,7 +477,7 @@ void RemindersWidget::appendRows(int offset)
     QSqlQuery q;
     q.prepare(sql);
     bindWhereParams(q);
-    q.bindValue(":limit",  kPageSize + 1); // یه تا اضافه می‌گیریم تا بفهمیم صفحه بعدی هست
+    q.bindValue(":limit",  kPageSize + 1); // Fetch one extra to determine if there is a next page
     q.bindValue(":offset", offset);
 
     if (!q.exec()) return;
@@ -494,7 +494,7 @@ void RemindersWidget::appendRows(int offset)
 
     while (q.next()) {
         fetched++;
-        if (fetched > kPageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+        if (fetched > kPageSize) break; // Do not display the extra record
 
         int     rfId         = q.value("rf_id").toInt();
         QString animalName   = q.value("animal_name").toString();
@@ -518,9 +518,9 @@ void RemindersWidget::appendRows(int offset)
         tbl->setItem(row, 2, makeItem(ownerName));
         tbl->setItem(row, 3, makeItem(phone));
         tbl->setItem(row, 4, makeItem(vaccineName));
-        tbl->setItem(row, 5, makeItem(reminderDate.toString("yyyy/MM/dd")));
+        tbl->setItem(row, 5, makeItem(PersianDate::toDisplayShort(reminderDate)));
 
-        // checkbox پیگیری
+        // Follow-up checkbox
         auto* cbContainer = new QWidget;
         cbContainer->setStyleSheet("background: transparent;");
         auto* cbLay = new QHBoxLayout(cbContainer);
@@ -534,7 +534,7 @@ void RemindersWidget::appendRows(int offset)
         });
         tbl->setCellWidget(row, 6, cbContainer);
 
-        // combo پاسخ صاحب
+        // Owner response combo
         int currentResp = ownerResp.isNull() ? 0 : (ownerResp.toBool() ? 1 : 2);
         tbl->setCellWidget(row, 7, makeResponseCombo(rfId, currentResp));
 
@@ -543,9 +543,7 @@ void RemindersWidget::appendRows(int offset)
 
     m_offset = offset + fetched;
     bool hasMore = (fetched > kPageSize);
-    // اگه دقیقاً kPageSize رکورد برگشت، بررسی می‌کنیم
-    // (چون با limit = kPageSize+1 گرفتیم، اگه fetched == kPageSize+1 بود یعنی بیشتر هست)
-    // fetched بعد از break هنوز kPageSize+1 هست پس:
+
     if (fetched > kPageSize) {
         hasMore = true;
         m_offset = offset + kPageSize;
@@ -555,7 +553,7 @@ void RemindersWidget::appendRows(int offset)
 
     tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // مدیریت دکمه "نمایش بیشتر"
+    // Manage "Show More" button
     auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
 
     if (hasMore) {
@@ -585,7 +583,7 @@ void RemindersWidget::appendRows(int offset)
                 QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_offset));
         }
     } else {
-        // همه رکوردها لود شدن — دکمه رو حذف می‌کنیم
+        // All records loaded — remove button
         if (m_loadMoreBtn) {
             if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
             m_loadMoreBtn->deleteLater();
@@ -701,13 +699,13 @@ void RemindersWidget::onOwnerResponseChanged(int rfId, int responseIndex)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PDF Export — کوئری مستقل بدون LIMIT، همه رکوردها
+// PDF Export — Independent query without LIMIT, all records
 // ─────────────────────────────────────────────────────────────────────────────
 
 void RemindersWidget::onExportPdfClicked()
 {
     QString path = QFileDialog::getSaveFileName(
-        this, "ذخیره PDF", "یادآوری‌ها.pdf", "PDF Files (*.pdf)");
+        this, "Save PDF", "Reminders.pdf", "PDF Files (*.pdf)");
     if (path.isEmpty()) return;
 
     QString sql =
@@ -722,14 +720,14 @@ void RemindersWidget::onExportPdfClicked()
         "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
         + buildWhereClause()
         + "ORDER BY v.next_reminder_at ASC";
-    // ← بدون LIMIT — همه رکوردها
+    // ← Without LIMIT — all records
 
     QSqlQuery q;
     q.prepare(sql);
     bindWhereParams(q);
 
     if (!q.exec()) {
-        QMessageBox::critical(this, "خطا", "خطا در دریافت داده‌ها.");
+        QMessageBox::critical(this, "Error", "Error retrieving data.");
         return;
     }
 
@@ -748,15 +746,15 @@ void RemindersWidget::onExportPdfClicked()
     int y = 100;
 
     painter.setFont(titleFont);
-    painter.drawText(QRect(0, y, pageW, 200), Qt::AlignCenter, "لیست یادآوری‌های واکسن");
+    painter.drawText(QRect(0, y, pageW, 200), Qt::AlignCenter, "Vaccination Reminder List");
     y += 260;
 
     painter.setFont(cellFont);
     painter.drawText(QRect(0, y, pageW, 150), Qt::AlignCenter,
-                     "تاریخ: " + QDate::currentDate().toString("yyyy/MM/dd"));
+                     "Date: " + PersianDate::todayDisplay());
     y += 220;
 
-    QStringList cols = {"حیوان", "صاحب", "شماره", "نوع واکسن", "موعد یادآوری", "پیگیری"};
+    QStringList cols = {"Animal", "Owner", "Phone", "Vaccine", "Reminder Date", "Follow-up"};
     int colW = pageW / cols.size();
     int rowH = 180;
 
@@ -783,8 +781,8 @@ void RemindersWidget::onExportPdfClicked()
             q.value("owner_name").toString(),
             q.value("phone").toString(),
             q.value("vaccine_name").toString(),
-            q.value("next_reminder_at").toDate().toString("yyyy/MM/dd"),
-            q.value("is_followed_up").toBool() ? "پیگیری شد" : "در انتظار"
+            PersianDate::toDisplayShort(q.value("next_reminder_at").toDate()),
+            q.value("is_followed_up").toBool() ? "Followed up" : "Pending"
         };
         for (int i = 0; i < rowData.size(); i++)
             painter.drawText(QRect(i * colW, y, colW, rowH), Qt::AlignCenter, rowData[i]);
@@ -794,6 +792,6 @@ void RemindersWidget::onExportPdfClicked()
     }
     painter.end();
 
-    QMessageBox::information(this, "موفق",
-                             QString("فایل PDF با موفقیت ذخیره شد.\n%1 ردیف چاپ شد.").arg(rowNum));
+    QMessageBox::information(this, "Success",
+                             QString("PDF file saved successfully.\n%1 rows printed.").arg(rowNum));
 }

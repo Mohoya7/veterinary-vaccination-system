@@ -215,10 +215,6 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         ui->btnOwners->click();
         m_owners->showOwnerById(ownerId);
     });
-    connect(m_animals, &AnimalsWidget::navigateToVaccination, this, [this](int vacId) {
-        ui->btnVaccinations->click();
-        m_vaccinations->showVaccinationById(vacId);
-    });
     connect(m_owners, &OwnersWidget::navigateToAnimal, this, [this](int animalId) {
         ui->btnAnimals->click();
         m_animals->showAnimalById(animalId);

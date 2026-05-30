@@ -6,7 +6,7 @@
    <rect><x>0</x><y>0</y><width>1200</width><height>700</height></rect>
   </property>
   <property name="windowTitle">
-   <string>کلینیک سلین - مدیریت دامپزشکی</string>
+   <string>کلینیک زیبا - مدیریت دامپزشکی</string>
   </property>
   <property name="layoutDirection">
    <enum>Qt::RightToLeft</enum>
@@ -50,7 +50,7 @@
            <property name="spacing"><number>2</number></property>
            <item>
             <widget class="QLabel" name="sidebarTitleLabel">
-             <property name="text"><string>کلینیک سلین</string></property>
+             <property name="text"><string>کلینیک زیبا</string></property>
              <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
             </widget>
            </item>

@@ -117,13 +117,13 @@ void DashboardWidget::loadStats()
 {
     QSqlQuery q;
 
-    q.exec("SELECT COUNT(*) FROM animals WHERE is_deleted = FALSE");
+    q.exec("SELECT COUNT(*) FROM animals");
     if (q.next()) {
         ui->animalCountLabel->setText(q.value(0).toString());
         ui->animalCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     }
 
-    q.exec("SELECT COUNT(*) FROM owners WHERE is_deleted = FALSE");
+    q.exec("SELECT COUNT(*) FROM owners");
     if (q.next()) {
         ui->ownerCountLabel->setText(q.value(0).toString());
         ui->ownerCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);

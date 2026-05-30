@@ -136,7 +136,7 @@ void LoginDialog::onLoginClicked()
     QString hashedPassword = Database::hashPassword(password);
 
     QSqlQuery query;
-    query.prepare("SELECT role FROM users WHERE username = :username AND password_hash = :password AND is_active = TRUE");
+    query.prepare("SELECT role FROM users WHERE username = :username AND password_hash = :password");
     query.bindValue(":username", username);
     query.bindValue(":password", hashedPassword);
     query.exec();
