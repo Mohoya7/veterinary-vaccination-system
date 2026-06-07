@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QDate>
+#include "persiandatepicker.h"
 
 class QSqlQuery;
 class QPushButton;
@@ -43,6 +44,11 @@ private:
 
     Ui::VaccinationsWidget *ui;
     bool m_rangeMode = true;
+
+    // Persian date pickers — جایگزین QDateEdit های UI
+    PersianDatePicker* m_pickerFrom   = nullptr;
+    PersianDatePicker* m_pickerTo     = nullptr;
+    PersianDatePicker* m_pickerSingle = nullptr;
 
     // pagination
     int  m_offset = 0;

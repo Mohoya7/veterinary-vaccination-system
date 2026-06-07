@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QDate>
+#include "persiandatepicker.h"
 
 class QSqlQuery;
 
@@ -33,10 +34,11 @@ private slots:
 private:
     void applyStyle();
     void loadStats();
-    void loadTable();           // reset + load first page
-    void appendRows(int offset); // append next page into existing table
+    void loadTable();
+    void appendRows(int offset);
+    void loadVaccineTypeCombo();
+    void buildFilterDateWidget();
 
-    // helpers
     QString buildWhereClause() const;
     void    bindWhereParams(QSqlQuery& q) const;
 
@@ -45,10 +47,22 @@ private:
 
     Ui::RemindersWidget *ui;
 
-    // pagination
-    int  m_offset      = 0;
-    static constexpr int kPageSize = 100;
+    // ── فیلتر تاریخ ──────────────────────────────────────────────────────────
+    QWidget*           m_filterDateWidget  = nullptr;
+    // کامبو انتخاب حالت (بر اساس روز / بازه تاریخ)
+    QComboBox*         m_subModeCombo      = nullptr;
+    // حالت دستی
+    QSpinBox*          m_daysSpin          = nullptr;
+    QPushButton*       m_dirBtn            = nullptr;  // ← toggle آینده/گذشته
+    // حالت بازه
+    PersianDatePicker* m_pickerFrom        = nullptr;
+    PersianDatePicker* m_pickerTo          = nullptr;
 
+    bool m_subManualMode = true; // true=بر اساس روز، false=بازه تاریخ
+
+    // pagination
+    int  m_offset = 0;
+    static constexpr int kPageSize = 100;
     QPushButton* m_loadMoreBtn = nullptr;
 };
 

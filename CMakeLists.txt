@@ -23,6 +23,7 @@ qt_add_executable(VetProject
     animalswidget.h animalswidget.cpp animalswidget.ui
     persiandate.h
     animaltypeinfo.h
+    persiandatepicker.h persiandatepicker.cpp
 
 
 )

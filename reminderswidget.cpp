@@ -1,4 +1,7 @@
 #include "reminderswidget.h"
+#include "animaltypeinfo.h"
+#include <QRadioButton>
+#include <QButtonGroup>
 #include "ui_reminderswidget.h"
 #include "addvaccinedialog.h"
 #include "persiandate.h"
@@ -35,12 +38,21 @@ RemindersWidget::RemindersWidget(QWidget *parent)
     connect(ui->searchEdit,      &QLineEdit::textChanged,
             this, &RemindersWidget::onFiltersChanged);
     connect(ui->animalTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+                loadVaccineTypeCombo();
+                onFiltersChanged();
+            });
+    connect(ui->vaccineTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RemindersWidget::onFiltersChanged);
+
+    // ── ساخت widget فیلتر تاریخ ──────────────────────────────────────────────
+    buildFilterDateWidget();
+
+    // لود اولیه واکسن‌ها
+    loadVaccineTypeCombo();
     connect(ui->followUpCombo,   QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RemindersWidget::onFiltersChanged);
     connect(ui->responseCombo,   QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &RemindersWidget::onFiltersChanged);
-    connect(ui->overdueDaysSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &RemindersWidget::onFiltersChanged);
     connect(ui->btnExportPdf,    &QPushButton::clicked,
             this, &RemindersWidget::onExportPdfClicked);
@@ -48,16 +60,14 @@ RemindersWidget::RemindersWidget(QWidget *parent)
     connect(ui->btnModeToday, &QPushButton::clicked, this, [this]() {
         ui->btnModeToday->setChecked(true);
         ui->btnModeOverdue->setChecked(false);
-        ui->overdueDaysLabel->setVisible(false);
-        ui->overdueDaysSpin->setVisible(false);
+        ui->filterDateContainer->setVisible(false);
         onFiltersChanged();
     });
 
     connect(ui->btnModeOverdue, &QPushButton::clicked, this, [this]() {
         ui->btnModeOverdue->setChecked(true);
         ui->btnModeToday->setChecked(false);
-        ui->overdueDaysLabel->setVisible(true);
-        ui->overdueDaysSpin->setVisible(true);
+        ui->filterDateContainer->setVisible(true);
         onFiltersChanged();
     });
 
@@ -131,6 +141,7 @@ void RemindersWidget::applyStyle()
     ui->animalTypeCombo->setStyleSheet(comboStyle);
     ui->followUpCombo->setStyleSheet(comboStyle);
     ui->responseCombo->setStyleSheet(comboStyle);
+    ui->vaccineTypeCombo->setStyleSheet(comboStyle);
 
     setStyleSheet(R"(
         QWidget { background: transparent; }
@@ -293,6 +304,189 @@ void RemindersWidget::applyStyle()
 // Slots
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── loadVaccineTypeCombo ─────────────────────────────────────────────────────
+void RemindersWidget::loadVaccineTypeCombo()
+{
+    int animalTypeIdx = ui->animalTypeCombo->currentIndex();
+
+    ui->vaccineTypeCombo->blockSignals(true);
+    ui->vaccineTypeCombo->clear();
+    ui->vaccineTypeCombo->addItem("همه واکسن‌ها", -1);
+
+    QSqlQuery q;
+    if (animalTypeIdx == 0) {
+        q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
+    } else {
+        q.prepare(
+            "SELECT DISTINCT vt.id, vt.name "
+            "FROM vaccine_types vt "
+            "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
+            "WHERE vta.animal_type_id = :atid "
+            "ORDER BY vt.name");
+        q.bindValue(":atid", animalTypeIdx);
+    }
+    q.exec();
+    while (q.next())
+        ui->vaccineTypeCombo->addItem(q.value("name").toString(),
+                                      q.value("id").toInt());
+    ui->vaccineTypeCombo->blockSignals(false);
+}
+
+// ── buildFilterDateWidget ─────────────────────────────────────────────────────
+void RemindersWidget::buildFilterDateWidget()
+{
+
+    m_filterDateWidget = new QWidget(this);
+    m_filterDateWidget->setStyleSheet("background:transparent;");
+    auto* mainLay = new QHBoxLayout(m_filterDateWidget);
+    mainLay->setContentsMargins(0, 0, 0, 0);
+    mainLay->setSpacing(6);
+
+    // ── کامبو انتخاب حالت (بر اساس روز / بازه تاریخ) ────────────────────
+    m_subModeCombo = new QComboBox;
+    m_subModeCombo->addItem("بر اساس روز", 0);   // index 0 = حالت دستی
+    m_subModeCombo->addItem("بازه تاریخ",  1);   // index 1 = بازه
+    m_subModeCombo->setLayoutDirection(Qt::RightToLeft);
+    m_subModeCombo->setStyleSheet(R"(
+        QComboBox {
+            background: #FBFFF7;
+            border: 1px solid #A5D6A7;
+            border-radius: 8px;
+            padding: 5px 10px 5px 32px;
+            font-size: 12px;
+            color: #2E7D32;
+            font-weight: 500;
+            min-height: 22px;
+        }
+        QComboBox:hover { background: #E8F5E9; border-color: #2E7D32; }
+        QComboBox::drop-down {
+            subcontrol-origin: padding; subcontrol-position: left center;
+            width: 28px; border: none; background: transparent;
+        }
+        QComboBox::down-arrow {
+            image: url(:/icons/chevron-down.svg); width: 16px; height: 16px;
+        }
+        QComboBox QAbstractItemView {
+            background: white; border: 1px solid #C8E6C9; border-radius: 8px;
+            selection-background-color: #E8F5E9; selection-color: #1B5E20;
+            font-size: 12px; padding: 4px; outline: none;
+        }
+        QComboBox QAbstractItemView::item {
+            padding: 8px 12px; min-height: 30px; border-radius: 4px; color: #212121;
+        }
+        QComboBox QAbstractItemView::item:selected { background: #E8F5E9; color: #2E7D32; }
+    )");
+    mainLay->addWidget(m_subModeCombo);
+
+    // ── ستون دستی (بر اساس روز) ──────────────────────────────────────────
+    auto* manualWidget = new QWidget;
+    manualWidget->setStyleSheet("background:transparent;");
+    auto* manualLay = new QHBoxLayout(manualWidget);
+    manualLay->setContentsMargins(0, 0, 0, 0);
+    manualLay->setSpacing(6);
+
+    m_daysSpin = new QSpinBox;
+    m_daysSpin->setRange(1, 365);
+    m_daysSpin->setValue(7);
+    m_daysSpin->setFixedHeight(32);
+    m_daysSpin->setFixedWidth(65);
+    m_daysSpin->setAlignment(Qt::AlignCenter);
+    m_daysSpin->setStyleSheet(R"(
+        QSpinBox {
+            border: 1px solid #A5D6A7; border-radius: 6px;
+            padding: 4px 6px; font-size: 13px;
+            background: #F9FBF9; color: #2E7D32; font-weight: 500;
+        }
+        QSpinBox:focus { border-color: #2E7D32; }
+        QSpinBox::up-button, QSpinBox::down-button {
+            border: none; width: 16px; background: transparent;
+        }
+    )");
+
+    // ── toggle button آینده/گذشته ─────────────────────────────────────────
+    m_dirBtn = new QPushButton("روز آینده");
+    m_dirBtn->setProperty("isFuture", true);   // دیفالت: روز آینده
+    m_dirBtn->setFixedHeight(32);
+    m_dirBtn->setFixedWidth(88);               // عرض کمتر
+    m_dirBtn->setCursor(Qt::PointingHandCursor);
+    m_dirBtn->setStyleSheet(R"(
+        QPushButton {
+            background: #F1F8E9;
+            border: 1px solid #A5D6A7;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #2E7D32;
+            font-weight: 500;
+            qproperty-alignment: AlignCenter;
+        }
+        QPushButton:hover   { background: #E8F5E9; border-color: #2E7D32; }
+        QPushButton:pressed { background: #C8E6C9; }
+    )");
+    // کلیک → تغییر حالت
+    connect(m_dirBtn, &QPushButton::clicked, this, [this]() {
+        bool wasFuture = m_dirBtn->property("isFuture").toBool();
+        m_dirBtn->setProperty("isFuture", !wasFuture);
+        m_dirBtn->setText(!wasFuture ? "روز آینده" : "روز گذشته");
+        onFiltersChanged();
+    });
+
+    manualLay->addWidget(m_daysSpin);
+    manualLay->addWidget(m_dirBtn);
+    mainLay->addWidget(manualWidget);
+
+    // ── ستون بازه تاریخ ──────────────────────────────────────────────────
+    auto* rangeWidget = new QWidget;
+    rangeWidget->setStyleSheet("background:transparent;min-height: 32px;");
+    rangeWidget->setVisible(false);
+    auto* rangeLay = new QHBoxLayout(rangeWidget);
+    rangeLay->setContentsMargins(0, 0, 0, 0);
+    rangeLay->setSpacing(6);
+
+    m_pickerFrom = new PersianDatePicker(rangeWidget);
+    m_pickerFrom->setDate(QDate::currentDate());
+    m_pickerFrom->setFixedWidth(150);
+
+    auto* toLbl = new QLabel("تا");
+    toLbl->setStyleSheet("font-size:12px;color:#757575;background:transparent;");
+    toLbl->setAlignment(Qt::AlignVCenter | Qt::AlignHCenter);
+    toLbl->setFixedWidth(20);
+
+    m_pickerTo = new PersianDatePicker(rangeWidget);
+    m_pickerTo->setDate(QDate::currentDate());
+    m_pickerTo->setFixedWidth(150);
+
+    rangeLay->setAlignment(Qt::AlignVCenter);
+    rangeLay->addWidget(m_pickerFrom);
+    rangeLay->addWidget(toLbl);
+    rangeLay->addWidget(m_pickerTo);
+    mainLay->addWidget(rangeWidget);
+
+    mainLay->addStretch();
+
+    // ── جایگزاری در container ─────────────────────────────────────────────
+    if (ui->filterDateContainer->layout())
+        delete ui->filterDateContainer->layout();
+    auto* containerLay = new QVBoxLayout(ui->filterDateContainer);
+    containerLay->setContentsMargins(0, 0, 0, 0);
+    containerLay->setAlignment(Qt::AlignVCenter);
+    containerLay->addWidget(m_filterDateWidget);
+
+    // ── signals ───────────────────────────────────────────────────────────
+    connect(m_subModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this, manualWidget, rangeWidget](int idx) {
+                m_subManualMode = (idx == 0);
+                manualWidget->setVisible(m_subManualMode);
+                rangeWidget->setVisible(!m_subManualMode);
+                onFiltersChanged();
+            });
+    connect(m_daysSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &RemindersWidget::onFiltersChanged);
+    connect(m_pickerFrom, &PersianDatePicker::dateChanged,
+            this, [this](const QDate&) { onFiltersChanged(); });
+    connect(m_pickerTo, &PersianDatePicker::dateChanged,
+            this, [this](const QDate&) { onFiltersChanged(); });
+}
+
 void RemindersWidget::onFiltersChanged()
 {
     loadStats();
@@ -356,14 +550,19 @@ QString RemindersWidget::buildWhereClause() const
         w += "AND v.next_reminder_at = :today ";
     else
         w += "AND v.next_reminder_at >= :overdueFrom "
-             "AND v.next_reminder_at < :today ";
+             "AND v.next_reminder_at <= :overdueTo ";
 
     if (!search.isEmpty())
         w += "AND (a.name LIKE :search OR o.phone LIKE :search2 "
              "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
 
-    if (animalTypeIdx == 1) w += "AND a.type = 'dog' ";
-    else if (animalTypeIdx == 2) w += "AND a.type = 'cat' ";
+    if (animalTypeIdx == 1) w += "AND a.animal_type_id = 1 ";
+    else if (animalTypeIdx == 2) w += "AND a.animal_type_id = 2 ";
+
+    // فیلتر نوع واکسن
+    int vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+    if (vaccineTypeId > 0)
+        w += "AND v.vaccine_type_id = :vtid ";
 
     if (followUpIdx == 1)      w += "AND rf.is_followed_up = FALSE ";
     else if (followUpIdx == 2) w += "AND rf.is_followed_up = TRUE ";
@@ -377,15 +576,37 @@ QString RemindersWidget::buildWhereClause() const
 
 void RemindersWidget::bindWhereParams(QSqlQuery& q) const
 {
-    bool    modeToday   = ui->btnModeToday->isChecked();
-    QString today       = QDate::currentDate().toString("yyyy-MM-dd");
-    QString search      = ui->searchEdit->text().trimmed();
-    int     overdueDays = ui->overdueDaysSpin->value();
-
+    bool    modeToday = ui->btnModeToday->isChecked();
+    QString today     = QDate::currentDate().toString("yyyy-MM-dd");
+    QString search    = ui->searchEdit->text().trimmed();
     q.bindValue(":today", today);
+
+    int vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+    if (vaccineTypeId > 0)
+        q.bindValue(":vtid", vaccineTypeId);
+
     if (!modeToday) {
-        q.bindValue(":overdueFrom",
-                    QDate::currentDate().addDays(-overdueDays).toString("yyyy-MM-dd"));
+        if (m_subManualMode) {
+            int days = m_daysSpin ? m_daysSpin->value() : 7;
+            // ✅ از property به جای currentIndex
+            bool isFuture = m_dirBtn ? m_dirBtn->property("isFuture").toBool() : true;
+            if (isFuture) {
+                // از امروز تا n روز بعد
+                q.bindValue(":overdueFrom", today);
+                q.bindValue(":overdueTo",
+                            QDate::currentDate().addDays(days).toString("yyyy-MM-dd"));
+            } else {
+                // از n روز قبل تا امروز
+                q.bindValue(":overdueFrom",
+                            QDate::currentDate().addDays(-days).toString("yyyy-MM-dd"));
+                q.bindValue(":overdueTo", today);
+            }
+        } else {
+            QDate from = m_pickerFrom ? m_pickerFrom->date() : QDate::currentDate();
+            QDate to   = m_pickerTo   ? m_pickerTo->date()   : QDate::currentDate();
+            q.bindValue(":overdueFrom", from.toString("yyyy-MM-dd"));
+            q.bindValue(":overdueTo",   to.toString("yyyy-MM-dd"));
+        }
     }
     if (!search.isEmpty()) {
         q.bindValue(":search",  "%" + search + "%");
@@ -461,7 +682,7 @@ void RemindersWidget::loadTable()
 void RemindersWidget::appendRows(int offset)
 {
     QString sql =
-        "SELECT DISTINCT rf.id AS rf_id, a.name AS animal_name, a.type AS animal_type, "
+        "SELECT DISTINCT rf.id AS rf_id, a.name AS animal_name, a.animal_type_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
         "vt.name AS vaccine_name, v.next_reminder_at, "
         "rf.is_followed_up, rf.owner_responded "
@@ -498,7 +719,7 @@ void RemindersWidget::appendRows(int offset)
 
         int     rfId         = q.value("rf_id").toInt();
         QString animalName   = q.value("animal_name").toString();
-        QString animalType   = q.value("animal_type").toString();
+        auto    ti           = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
         QString ownerName    = q.value("owner_name").toString();
         QString phone        = q.value("phone").toString();
         QString vaccineName  = q.value("vaccine_name").toString();
@@ -509,12 +730,11 @@ void RemindersWidget::appendRows(int offset)
         tbl->insertRow(row);
         tbl->setRowHeight(row, 46);
 
-        bool isDog = (animalType == "dog");
         tbl->setItem(row, 0, makeItem(animalName));
         tbl->setCellWidget(row, 1, makeBadge(
-                                       isDog ? "سگ" : "گربه",
-                                       isDog ? "#E8F5E9" : "#FFF3E0",
-                                       isDog ? "#1B5E20" : "#BF360C"));
+                                       ti.name,
+                                       ti.badgeBg,
+                                       ti.badgeFg));
         tbl->setItem(row, 2, makeItem(ownerName));
         tbl->setItem(row, 3, makeItem(phone));
         tbl->setItem(row, 4, makeItem(vaccineName));
@@ -709,7 +929,7 @@ void RemindersWidget::onExportPdfClicked()
     if (path.isEmpty()) return;
 
     QString sql =
-        "SELECT DISTINCT a.name AS animal_name, a.type AS animal_type, "
+        "SELECT DISTINCT a.name AS animal_name, a.animal_type_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
         "vt.name AS vaccine_name, v.next_reminder_at, "
         "rf.is_followed_up, rf.owner_responded "

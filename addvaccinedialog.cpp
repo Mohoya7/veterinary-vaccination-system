@@ -1,15 +1,19 @@
 #include "addvaccinedialog.h"
 #include "ui_addvaccinedialog.h"
+#include "persiandatepicker.h"
+#include "styledmessagebox.h"
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QMessageBox>
 #include <QDate>
+#include <QVBoxLayout>
 
 AddVaccineDialog::AddVaccineDialog(int animalId, QWidget *parent)
     : QDialog(parent), ui(new Ui::AddVaccineDialog), m_animalId(animalId)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("افزودن واکسن");
+    setWindowTitle("Add Vaccine");
 
     QSqlQuery q;
     q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
@@ -27,9 +31,13 @@ AddVaccineDialog::AddVaccineDialog(int animalId, QWidget *parent)
             q.value("name").toString() + " | " + typeStr + " | " + q.value("owner_name").toString());
     }
 
-    ui->vaccinatedAtEdit->setDate(QDate::currentDate());
     loadVaccineTypes();
     applyStyle();
+
+    // Embed PersianDatePicker in container
+    m_datePicker = new PersianDatePicker(this);
+    m_datePicker->setDate(QDate::currentDate());
+    ui->vaccinatedAtLayout->addWidget(m_datePicker);
 
     connect(ui->vaccineTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AddVaccineDialog::onVaccineTypeChanged);
@@ -43,9 +51,9 @@ AddVaccineDialog::AddVaccineDialog(int animalId, int vaccinationId, QWidget *par
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("ویرایش واکسن");
-    ui->dialogTitle->setText("ویرایش واکسن");
-    ui->btnSave->setText("ذخیره تغییرات");
+    setWindowTitle("Edit Vaccine");
+    ui->dialogTitle->setText("Edit Vaccine");
+    ui->btnSave->setText("Save Changes");
 
     QSqlQuery q;
     q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
@@ -64,8 +72,14 @@ AddVaccineDialog::AddVaccineDialog(int animalId, int vaccinationId, QWidget *par
     }
 
     loadVaccineTypes();
-    loadExistingData(vaccinationId);
     applyStyle();
+
+    // Embed PersianDatePicker in container
+    m_datePicker = new PersianDatePicker(this);
+    ui->vaccinatedAtLayout->addWidget(m_datePicker);
+
+    // Load existing data — date is set directly on the picker
+    loadExistingData(vaccinationId);
 
     connect(ui->vaccineTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AddVaccineDialog::onVaccineTypeChanged);
@@ -109,6 +123,13 @@ void AddVaccineDialog::loadExistingData(int vaccinationId)
     q.exec();
     if (!q.next()) return;
 
+    // First read the date and set it on the picker — before anything else
+    QDate vacDate = QDate::fromString(q.value("vaccinated_at").toString(), "yyyy-MM-dd");
+    if (!vacDate.isValid())
+        vacDate = q.value("vaccinated_at").toDate();
+    if (m_datePicker && vacDate.isValid())
+        m_datePicker->setDate(vacDate);
+
     int typeId = q.value("vaccine_type_id").toInt();
     for (int i = 0; i < ui->vaccineTypeCombo->count(); i++) {
         if (ui->vaccineTypeCombo->itemData(i).toInt() == typeId) {
@@ -116,7 +137,6 @@ void AddVaccineDialog::loadExistingData(int vaccinationId)
             break;
         }
     }
-    ui->vaccinatedAtEdit->setDate(q.value("vaccinated_at").toDate());
     ui->reminderDaysSpin->setValue(q.value("reminder_days").toInt());
     ui->notesEdit->setText(q.value("notes").toString());
 }
@@ -200,25 +220,33 @@ void AddVaccineDialog::applyStyle()
 void AddVaccineDialog::onSaveClicked()
 {
     if (ui->vaccineTypeCombo->count() == 0) {
-        QMessageBox::warning(this, "خطا", "نوع واکسنی موجود نیست.");
+        StyledMessageBox::warning(this, "Error", "No vaccine type available.");
         return;
     }
 
-    int   vaccineTypeId  = ui->vaccineTypeCombo->currentData().toInt();
-    QDate vaccinatedAt   = ui->vaccinatedAtEdit->date();
-    int   reminderDays   = ui->reminderDaysSpin->value();
-    QDate nextReminder   = vaccinatedAt.addDays(reminderDays);
+    int   vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
+    QDate vaccinatedAt  = m_datePicker->date();
+
+    if (!vaccinatedAt.isValid()) {
+        StyledMessageBox::warning(this, "Error", "Please select the vaccination date.");
+        return;
+    }
+    if (vaccinatedAt > QDate::currentDate()) {
+        StyledMessageBox::warning(this, "Error", "Vaccination date cannot be in the future.");
+        return;
+    }
+
+    int   reminderDays = ui->reminderDaysSpin->value();
+    QDate nextReminder = vaccinatedAt.addDays(reminderDays);
 
     QSqlQuery q;
 
     if (m_vaccinationId < 0) {
-        // Insert
         q.prepare("INSERT INTO vaccinations "
                   "(animal_id, vaccine_type_id, vaccinated_at, reminder_days, next_reminder_at, notes) "
                   "VALUES (:animal, :vtype, :vat, :days, :next, :notes)");
         q.bindValue(":animal", m_animalId);
     } else {
-        // Update
         q.prepare("UPDATE vaccinations SET "
                   "vaccine_type_id=:vtype, vaccinated_at=:vat, "
                   "reminder_days=:days, next_reminder_at=:next, "
@@ -233,7 +261,7 @@ void AddVaccineDialog::onSaveClicked()
     q.bindValue(":notes", ui->notesEdit->text().trimmed());
 
     if (!q.exec()) {
-        QMessageBox::critical(this, "خطا", "خطا در ثبت واکسن.");
+        StyledMessageBox::error(this, "Error", "Error registering vaccine:\n" + q.lastError().text());
         return;
     }
 

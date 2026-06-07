@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QMap>
+#include "persiandatepicker.h"
 
 namespace Ui { class AddVaccineDialog; }
 
@@ -27,6 +28,7 @@ private:
     void loadExistingData(int vaccinationId);
 
     Ui::AddVaccineDialog *ui;
+    PersianDatePicker   *m_datePicker  = nullptr;
     int m_animalId      = -1;
     int m_vaccinationId = -1; // -1 = add mode
     int m_animalTypeId = -1;

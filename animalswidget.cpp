@@ -5,6 +5,7 @@
 #include "addvaccinedialog.h"
 #include "styledmessagebox.h"
 #include "persiandate.h"
+#include "animaltypeinfo.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -22,7 +23,7 @@
 // ─── Animal item widget ─────────────────────────────────
 class AnimalItemWidget : public QWidget {
 public:
-    AnimalItemWidget(const QString& name, const QString& type,
+    AnimalItemWidget(const QString& name, int typeId,
                      const QString& breed, QWidget* parent = nullptr)
         : QWidget(parent)
     {
@@ -34,13 +35,13 @@ public:
         lay->setSpacing(10);
 
         // Avatar with animal type icon
-        bool isDog = (type == "dog");
-        auto* avatar = new QLabel(isDog ? "🐕" : "🐈");
+        auto ti = AnimalTypeInfo::get(typeId);
+        auto* avatar = new QLabel(ti.emoji);
         avatar->setFixedSize(36, 36);
         avatar->setAlignment(Qt::AlignCenter);
         avatar->setStyleSheet(QString(
                                   "background:%1;border-radius:18px;font-size:16px;")
-                                  .arg(isDog ? "#E8F5E9" : "#FFF3E0"));
+                                  .arg(ti.badgeBg));
 
         auto* infoW = new QWidget;
         infoW->setStyleSheet("background:transparent;");
@@ -52,7 +53,7 @@ public:
         nameL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         nameL->setStyleSheet("font-size:13px;font-weight:500;color:#212121;background:transparent;");
 
-        QString sub = isDog ? "سگ" : "گربه";
+        QString sub = ti.name;
         if (!breed.isEmpty()) sub += " | " + breed;
         auto* subL = new QLabel(sub);
         subL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -304,15 +305,16 @@ void AnimalsWidget::loadAnimals(const QString& search, int typeFilter)
 void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int offset)
 {
     QString sql =
-        "SELECT a.id, a.name, a.type, a.breed "
+        "SELECT a.id, a.name, a.animal_type_id, a.breed "
         "FROM animals a "
-        "JOIN owners o ON a.owner_id = o.id ";
+        "JOIN owners o ON a.owner_id = o.id "
+        "WHERE TRUE ";
 
     if (!search.isEmpty())
         sql += "AND (a.name LIKE :s OR o.phone LIKE :s2 "
                "OR CONCAT(o.first_name,' ',o.last_name) LIKE :s3) ";
-    if (typeFilter == 1) sql += "AND a.type = 'dog' ";
-    else if (typeFilter == 2) sql += "AND a.type = 'cat' ";
+    if (typeFilter == 1) sql += "AND a.animal_type_id = 1 ";
+    else if (typeFilter == 2) sql += "AND a.animal_type_id = 2 ";
 
     sql += QString("ORDER BY a.name LIMIT %1 OFFSET %2")
                .arg(m_pageSize + 1)
@@ -334,15 +336,15 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
         if (fetched > m_pageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
 
         int     id    = q.value("id").toInt();
-        QString name  = q.value("name").toString();
-        QString type  = q.value("type").toString();
-        QString breed = q.value("breed").toString();
+        QString name   = q.value("name").toString();
+        int     typeId = q.value("animal_type_id").toInt();
+        QString breed  = q.value("breed").toString();
 
         auto* item = new QListWidgetItem(ui->animalListWidget);
         item->setData(Qt::UserRole, id);
         item->setSizeHint(QSize(0, 56));
 
-        auto* widget = new AnimalItemWidget(name, type, breed, ui->animalListWidget);
+        auto* widget = new AnimalItemWidget(name, typeId, breed, ui->animalListWidget);
         ui->animalListWidget->setItemWidget(item, widget);
 
         if (id == m_selectedAnimalId)
@@ -408,7 +410,7 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
     QSqlQuery q;
     q.prepare(
-        "SELECT a.name, a.type, a.breed, a.birth_date, a.gender, a.file_number, "
+        "SELECT a.name, a.animal_type_id, a.breed, a.birth_date, a.gender, a.file_number, "
         "a.owner_id, CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone "
         "FROM animals a JOIN owners o ON a.owner_id = o.id "
         "WHERE a.id = :id");
@@ -418,18 +420,17 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
     m_selectedOwnerId = q.value("owner_id").toInt();
 
-    bool    isDog   = (q.value("type").toString() == "dog");
-    QString typeStr = isDog ? "سگ" : "گربه";
-    QString name    = q.value("name").toString();
+    auto ti      = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
+    QString name = q.value("name").toString();
 
     // Avatar
-    ui->animalAvatarLabel->setText(isDog ? "🐕" : "🐈");
+    ui->animalAvatarLabel->setText(ti.emoji);
     ui->animalAvatarLabel->setStyleSheet(
         "background:rgba(255,255,255,0.18);border-radius:25px;font-size:20px;");
 
     ui->animalNameLabel->setText(name);
 
-    QString sub = typeStr;
+    QString sub = ti.name;
     if (!q.value("breed").toString().isEmpty())
         sub += " | " + q.value("breed").toString();
     ui->animalSubLabel->setText(sub);
@@ -441,7 +442,7 @@ void AnimalsWidget::showAnimalProfile(int animalId)
     if (!fileNum.isEmpty())
         addInfoRow(ui->infoRowsContainer, "شماره پرونده", fileNum);
 
-    addInfoRow(ui->infoRowsContainer, "نوع", typeStr);
+    addInfoRow(ui->infoRowsContainer, "نوع", ti.name);
 
     if (!q.value("breed").toString().isEmpty())
         addInfoRow(ui->infoRowsContainer, "نژاد", q.value("breed").toString());
@@ -886,34 +887,19 @@ void AnimalsWidget::onEditAnimalClicked()
 {
     if (m_selectedAnimalId < 0) return;
 
-    // Get owner info for the dialog
     QSqlQuery q;
-    q.prepare("SELECT owner_id FROM animals WHERE id = :id");
+    q.prepare("SELECT a.owner_id, o.phone FROM animals a "
+              "JOIN owners o ON a.owner_id = o.id WHERE a.id = :id");
     q.bindValue(":id", m_selectedAnimalId);
     q.exec();
     if (!q.next()) return;
-    int ownerId = q.value("owner_id").toInt();
 
-    q.prepare("SELECT phone FROM owners WHERE id = :id");
-    q.bindValue(":id", ownerId);
-    q.exec();
-    QString phone = q.next() ? q.value("phone").toString() : "";
+    int     ownerId = q.value("owner_id").toInt();
+    QString phone   = q.value("phone").toString();
 
-    // Reuse AddAnimalDialog — pre-fill data
-    // For now open dialog, load data manually
-    AddAnimalDialog dlg(ownerId, phone, this);
-
-    // Pre-fill animal data
-    QSqlQuery aq;
-    aq.prepare("SELECT name, type, breed, birth_date, gender FROM animals WHERE id=:id");
-    aq.bindValue(":id", m_selectedAnimalId);
-    aq.exec();
-    if (aq.next()) {
-        // We need edit support in AddAnimalDialog — for now just open as-is
-        // TODO: add edit mode to AddAnimalDialog
-    }
-
+    AddAnimalDialog dlg(ownerId, phone, m_selectedAnimalId, this);
     if (dlg.exec() != QDialog::Accepted) return;
+
     loadAnimals();
     showAnimalProfile(m_selectedAnimalId);
 }

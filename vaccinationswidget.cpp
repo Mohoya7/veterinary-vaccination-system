@@ -2,6 +2,7 @@
 #include "ui_vaccinationswidget.h"
 #include "addvaccinedialog.h"
 #include "persiandate.h"
+#include "persiandatepicker.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -28,10 +29,30 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
 
-    // Default date
-    ui->dateFromEdit->setDate(QDate::currentDate().addYears(-2));
-    ui->dateToEdit->setDate(QDate::currentDate().addYears(2));
-    ui->singleDateEdit->setDate(QDate::currentDate());
+    // مخفی کردن QDateEdit های اصلی و جایگزینی با PersianDatePicker
+    ui->dateFromEdit->hide();
+    ui->dateToEdit->hide();
+    ui->singleDateEdit->hide();
+
+    // ساخت picker ها و قرار دادن در layout به جای QDateEdit ها
+    m_pickerFrom = new PersianDatePicker(this);
+    m_pickerFrom->setDate(QDate::currentDate());
+    m_pickerFrom->setFixedWidth(160);
+    ui->dateFromEdit->parentWidget()->layout()->replaceWidget(
+        ui->dateFromEdit, m_pickerFrom);
+
+    m_pickerTo = new PersianDatePicker(this);
+    m_pickerTo->setDate(QDate::currentDate());
+    m_pickerTo->setFixedWidth(160);
+    ui->dateToEdit->parentWidget()->layout()->replaceWidget(
+        ui->dateToEdit, m_pickerTo);
+
+    m_pickerSingle = new PersianDatePicker(this);
+    m_pickerSingle->setDate(QDate::currentDate());
+    m_pickerSingle->setFixedWidth(160);
+    m_pickerSingle->setVisible(false);
+    ui->singleDateEdit->parentWidget()->layout()->replaceWidget(
+        ui->singleDateEdit, m_pickerSingle);
 
     applyStyle();
     loadVaccineTypeCombo();
@@ -39,7 +60,6 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     // Default mode: Time interval
     ui->btnModeRange->setChecked(true);
     ui->btnModeSingle->setChecked(false);
-    ui->singleDateEdit->setVisible(false);
 
     connect(ui->searchEdit,       &QLineEdit::textChanged,
             this, &VaccinationsWidget::onFiltersChanged);
@@ -54,6 +74,12 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     connect(ui->dateToEdit,       &QDateEdit::dateChanged,
             this, &VaccinationsWidget::onFiltersChanged);
     connect(ui->singleDateEdit,   &QDateEdit::dateChanged,
+            this, &VaccinationsWidget::onFiltersChanged);
+    connect(m_pickerFrom,   &PersianDatePicker::dateChanged,
+            this, &VaccinationsWidget::onFiltersChanged);
+    connect(m_pickerTo,     &PersianDatePicker::dateChanged,
+            this, &VaccinationsWidget::onFiltersChanged);
+    connect(m_pickerSingle, &PersianDatePicker::dateChanged,
             this, &VaccinationsWidget::onFiltersChanged);
     connect(ui->btnModeSingle,    &QPushButton::clicked,
             this, &VaccinationsWidget::onDateModeChanged);
@@ -91,11 +117,13 @@ void VaccinationsWidget::showVaccinationById(int vacId)
 
     QSqlQuery q;
     q.prepare(
-        "SELECT v.id, a.name AS animal_name, a.type AS animal_type, "
+        "SELECT v.id, a.name AS animal_name, a.animal_type_id, "
+        "at.name AS type_name, at.badge_bg, at.badge_fg, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
         "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
         "FROM vaccinations v "
         "JOIN animals a        ON v.animal_id        = a.id "
+        "JOIN animal_types at  ON a.animal_type_id   = at.id "
         "JOIN owners  o        ON a.owner_id          = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id   = vt.id "
         "WHERE v.id = :id"
@@ -114,9 +142,11 @@ void VaccinationsWidget::showVaccinationById(int vacId)
     tbl->insertRow(0);
     tbl->setRowHeight(0, 44);
 
-    bool    isDog       = (q.value("animal_type").toString() == "dog");
     QDate   vacDate     = q.value("vaccinated_at").toDate();
     QDate   nextDate    = q.value("next_reminder_at").toDate();
+    QString badgeBg     = q.value("badge_bg").toString();
+    QString badgeFg     = q.value("badge_fg").toString();
+    QString typeName    = q.value("type_name").toString();
 
     QString statusText, statusBg, statusFg;
     if      (nextDate < today)  { statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828"; }
@@ -124,10 +154,7 @@ void VaccinationsWidget::showVaccinationById(int vacId)
     else                        { statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32"; }
 
     tbl->setItem(0, 0, makeItem(q.value("animal_name").toString()));
-    tbl->setCellWidget(0, 1, makeBadge(
-                                 isDog ? "سگ" : "گربه",
-                                 isDog ? "#E8F5E9" : "#FFF3E0",
-                                 isDog ? "#1B5E20" : "#BF360C"));
+    tbl->setCellWidget(0, 1, makeBadge(typeName, badgeBg, badgeFg));
     tbl->setItem(0, 2, makeItem(q.value("owner_name").toString()));
     auto* phoneItem = new QTableWidgetItem(q.value("phone").toString());
     phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -253,9 +280,6 @@ void VaccinationsWidget::applyStyle()
     ui->animalTypeCombo->setStyleSheet(comboStyle);
     ui->statusCombo->setStyleSheet(comboStyle);
     ui->vaccineTypeCombo->setStyleSheet(comboStyle);
-    ui->dateFromEdit->setStyleSheet(dateStyle);
-    ui->dateToEdit->setStyleSheet(dateStyle);
-    ui->singleDateEdit->setStyleSheet(dateStyle);
 
 
     ;
@@ -409,28 +433,30 @@ void VaccinationsWidget::applyStyle()
 void VaccinationsWidget::loadVaccineTypeCombo()
 {
     int animalTypeIdx = ui->animalTypeCombo->currentIndex();
-    QString animalType;
-    if      (animalTypeIdx == 1) animalType = "dog";
-    else if (animalTypeIdx == 2) animalType = "cat";
 
     ui->vaccineTypeCombo->blockSignals(true);
     ui->vaccineTypeCombo->clear();
     ui->vaccineTypeCombo->addItem("همه واکسن‌ها", -1);
 
     QSqlQuery q;
-    if (animalType.isEmpty()) {
+    if (animalTypeIdx == 0) {
+        // همه انواع — همه واکسن‌ها
         q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
     } else {
+        // فقط واکسن‌های مرتبط با نوع حیوان انتخابی
+        // animal_types.id=1→سگ, id=2→گربه (ترتیب با انتخاب کامبو: idx1=سگ, idx2=گربه)
         q.prepare(
-            "SELECT id, name FROM vaccine_types "
-
-            "ORDER BY name"
-            );
-        q.bindValue(":type", animalType);
+            "SELECT DISTINCT vt.id, vt.name "
+            "FROM vaccine_types vt "
+            "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
+            "WHERE vta.animal_type_id = :atid "
+            "ORDER BY vt.name");
+        q.bindValue(":atid", animalTypeIdx);  // idx1=1(سگ), idx2=2(گربه)
     }
     q.exec();
     while (q.next())
-        ui->vaccineTypeCombo->addItem(q.value("name").toString(), q.value("id").toInt());
+        ui->vaccineTypeCombo->addItem(q.value("name").toString(),
+                                      q.value("id").toInt());
 
     ui->vaccineTypeCombo->blockSignals(false);
 }
@@ -446,19 +472,19 @@ void VaccinationsWidget::onDateModeChanged()
     ui->btnModeRange->setChecked(m_rangeMode);
     ui->btnModeSingle->setChecked(!m_rangeMode);
 
-    ui->singleDateEdit->setVisible(!m_rangeMode);
-    ui->dateFromEdit->setVisible(m_rangeMode);
+    m_pickerSingle->setVisible(!m_rangeMode);
+    m_pickerFrom->setVisible(m_rangeMode);
     ui->dateToLabel->setVisible(m_rangeMode);
-    ui->dateToEdit->setVisible(m_rangeMode);
+    m_pickerTo->setVisible(m_rangeMode);
 
     onFiltersChanged();
 }
 
 void VaccinationsWidget::onClearDateClicked()
 {
-    ui->dateFromEdit->setDate(QDate::currentDate().addYears(-2));
-    ui->dateToEdit->setDate(QDate::currentDate().addYears(2));
-    ui->singleDateEdit->setDate(QDate::currentDate());
+    m_pickerFrom->setDate(QDate::currentDate());
+    m_pickerTo->setDate(QDate::currentDate());
+    m_pickerSingle->setDate(QDate::currentDate());
     loadTable();
 }
 
@@ -513,8 +539,8 @@ QString VaccinationsWidget::buildWhereClause() const
                  "OR o.phone LIKE :search2 "
                  "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
 
-    if      (animalTypeIdx == 1) where += "AND a.type = 'dog' ";
-    else if (animalTypeIdx == 2) where += "AND a.type = 'cat' ";
+    if      (animalTypeIdx == 1) where += "AND a.animal_type_id = 1 ";
+    else if (animalTypeIdx == 2) where += "AND a.animal_type_id = 2 ";
 
     if (vaccineTypeId > 0)
         where += "AND v.vaccine_type_id = :vtid ";
@@ -551,10 +577,10 @@ void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
         q.bindValue(":vtid", vaccineTypeId);
 
     if (!m_rangeMode)
-        q.bindValue(":single", ui->singleDateEdit->date().toString("yyyy-MM-dd"));
+        q.bindValue(":single", m_pickerSingle->date().toString("yyyy-MM-dd"));
     else {
-        q.bindValue(":dfrom", ui->dateFromEdit->date().toString("yyyy-MM-dd"));
-        q.bindValue(":dto",   ui->dateToEdit->date().toString("yyyy-MM-dd"));
+        q.bindValue(":dfrom", m_pickerFrom->date().toString("yyyy-MM-dd"));
+        q.bindValue(":dto",   m_pickerTo->date().toString("yyyy-MM-dd"));
     }
 }
 
@@ -622,13 +648,15 @@ void VaccinationsWidget::appendRows(int offset)
     auto* tbl = ui->vaccinationsTable;
 
     QString sql =
-        "SELECT DISTINCT v.id, a.name AS animal_name, a.type AS animal_type, "
+        "SELECT DISTINCT v.id, a.name AS animal_name, "
+        "at.name AS type_name, at.badge_bg, at.badge_fg, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
         "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
         "FROM vaccinations v "
-        "JOIN animals a      ON v.animal_id        = a.id "
-        "JOIN owners  o      ON a.owner_id          = o.id "
-        "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
+        "JOIN animals a        ON v.animal_id        = a.id "
+        "JOIN animal_types at  ON a.animal_type_id   = at.id "
+        "JOIN owners  o        ON a.owner_id          = o.id "
+        "JOIN vaccine_types vt ON v.vaccine_type_id   = vt.id "
         + buildWhereClause()
         + "ORDER BY v.vaccinated_at DESC "
           "LIMIT :limit OFFSET :offset";
@@ -656,7 +684,9 @@ void VaccinationsWidget::appendRows(int offset)
 
         int     vacId       = q.value("id").toInt();
         QString animalName  = q.value("animal_name").toString();
-        QString animalType  = q.value("animal_type").toString();
+        QString typeName    = q.value("type_name").toString();
+        QString badgeBg     = q.value("badge_bg").toString();
+        QString badgeFg     = q.value("badge_fg").toString();
         QString ownerName   = q.value("owner_name").toString();
         QString phone       = q.value("phone").toString();
         QString vaccineName = q.value("vaccine_name").toString();
@@ -676,13 +706,8 @@ void VaccinationsWidget::appendRows(int offset)
         tbl->insertRow(row);
         tbl->setRowHeight(row, 44);
 
-        bool isDog = (animalType == "dog");
-
         tbl->setItem(row, 0, makeItem(animalName));
-        tbl->setCellWidget(row, 1, makeBadge(
-                                       isDog ? "سگ" : "گربه",
-                                       isDog ? "#E8F5E9" : "#FFF3E0",
-                                       isDog ? "#1B5E20" : "#BF360C"));
+        tbl->setCellWidget(row, 1, makeBadge(typeName, badgeBg, badgeFg));
         tbl->setItem(row, 2, makeItem(ownerName));
         auto* phoneItem = new QTableWidgetItem(phone);
         phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -815,7 +840,7 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
         q.exec();
         if (!q.next()) return;
         int animalId = q.value("animal_id").toInt();
-        AddVaccineDialog dlg(animalId, this);
+        AddVaccineDialog dlg(animalId, vaccinationId, this);  // edit mode
         if (dlg.exec() == QDialog::Accepted) loadData();
     });
 
