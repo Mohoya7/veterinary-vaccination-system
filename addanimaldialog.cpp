@@ -15,7 +15,9 @@ AddAnimalDialog::AddAnimalDialog(int ownerId, const QString& ownerPhone, QWidget
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("Add New Animal");
+    if (auto* lo = qobject_cast<QHBoxLayout*>(ui->btnSave->parentWidget()->layout()))
+        lo->setDirection(QBoxLayout::RightToLeft);
+    setWindowTitle("افزودن حیوان جدید");
 
     // Owner info
     QSqlQuery q;
@@ -50,8 +52,10 @@ AddAnimalDialog::AddAnimalDialog(int ownerId, const QString& ownerPhone,
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("Edit Animal Information");
-    ui->dialogTitle->setText("Edit Animal Information");
+    if (auto* lo = qobject_cast<QHBoxLayout*>(ui->btnSave->parentWidget()->layout()))
+        lo->setDirection(QBoxLayout::RightToLeft);
+    setWindowTitle("ویرایش اطلاعات حیوان");
+    ui->dialogTitle->setText("ویرایش اطلاعات حیوان");
 
     // Owner info
     QSqlQuery q;

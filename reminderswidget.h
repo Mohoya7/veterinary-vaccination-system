@@ -47,18 +47,18 @@ private:
 
     Ui::RemindersWidget *ui;
 
-    // ── فیلتر تاریخ ──────────────────────────────────────────────────────────
+    // ── Date filter ──────────────────────────────────────────────────────────
     QWidget*           m_filterDateWidget  = nullptr;
-    // کامبو انتخاب حالت (بر اساس روز / بازه تاریخ)
+    // Mode selection combo (based on day/date range)
     QComboBox*         m_subModeCombo      = nullptr;
-    // حالت دستی
+    // Manual mode
     QSpinBox*          m_daysSpin          = nullptr;
-    QPushButton*       m_dirBtn            = nullptr;  // ← toggle آینده/گذشته
-    // حالت بازه
+    QPushButton*       m_dirBtn            = nullptr;  // ← toggle future/past
+    //Interval mode
     PersianDatePicker* m_pickerFrom        = nullptr;
     PersianDatePicker* m_pickerTo          = nullptr;
 
-    bool m_subManualMode = true; // true=بر اساس روز، false=بازه تاریخ
+    bool m_subManualMode = true; // true=based on day, false=date range
 
     // pagination
     int  m_offset = 0;

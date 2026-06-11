@@ -3,6 +3,8 @@
 #include "addvaccinedialog.h"
 #include "persiandate.h"
 #include "persiandatepicker.h"
+#include "styledmessagebox.h"
+#include "session.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -29,12 +31,11 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
 
-    // مخفی کردن QDateEdit های اصلی و جایگزینی با PersianDatePicker
+    // Hide original QDateEdits and replace with PersianDatePicker
     ui->dateFromEdit->hide();
     ui->dateToEdit->hide();
     ui->singleDateEdit->hide();
 
-    // ساخت picker ها و قرار دادن در layout به جای QDateEdit ها
     m_pickerFrom = new PersianDatePicker(this);
     m_pickerFrom->setDate(QDate::currentDate());
     m_pickerFrom->setFixedWidth(160);
@@ -57,7 +58,6 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     applyStyle();
     loadVaccineTypeCombo();
 
-    // Default mode: Time interval
     ui->btnModeRange->setChecked(true);
     ui->btnModeSingle->setChecked(false);
 
@@ -68,12 +68,6 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     connect(ui->statusCombo,      QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &VaccinationsWidget::onFiltersChanged);
     connect(ui->vaccineTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &VaccinationsWidget::onFiltersChanged);
-    connect(ui->dateFromEdit,     &QDateEdit::dateChanged,
-            this, &VaccinationsWidget::onFiltersChanged);
-    connect(ui->dateToEdit,       &QDateEdit::dateChanged,
-            this, &VaccinationsWidget::onFiltersChanged);
-    connect(ui->singleDateEdit,   &QDateEdit::dateChanged,
             this, &VaccinationsWidget::onFiltersChanged);
     connect(m_pickerFrom,   &PersianDatePicker::dateChanged,
             this, &VaccinationsWidget::onFiltersChanged);
@@ -103,11 +97,9 @@ void VaccinationsWidget::loadData()
 
 void VaccinationsWidget::showVaccinationById(int vacId)
 {
-    // فیلترها رو دست نمی‌زنیم — فقط جدول رو با اون یه رکورد پر می‌کنیم
     auto* tbl = ui->vaccinationsTable;
     tbl->setRowCount(0);
 
-    // حذف دکمه نمایش بیشتر اگه بود
     if (m_loadMoreBtn) {
         auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
         if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
@@ -166,10 +158,8 @@ void VaccinationsWidget::showVaccinationById(int vacId)
     tbl->setCellWidget(0, 8, makeActionButtons(vacId));
 }
 
-//  applyStyle
 void VaccinationsWidget::applyStyle()
 {
-    // Custom combo
     QString comboStyle = R"(
     QComboBox {
         background: #FBFFF7;
@@ -181,202 +171,77 @@ void VaccinationsWidget::applyStyle()
         font-weight: 500;
         min-height: 32px;
     }
-    QComboBox:hover {
-        background: #E8F5E9;
-        border-color: #2E7D32;
-    }
-    QComboBox:focus {
-        border-color: #2E7D32;
-        background: #E8F5E9;
-    }
+    QComboBox:hover { background: #E8F5E9; border-color: #2E7D32; }
+    QComboBox:focus { border-color: #2E7D32; background: #E8F5E9; }
     QComboBox::drop-down {
         subcontrol-origin: padding;
         subcontrol-position: left center;
-        width: 28px;
-        border: none;
-        background: transparent;
+        width: 28px; border: none; background: transparent;
     }
     QComboBox::down-arrow {
         image: url(:/icons/chevron-down.svg);
-        width: 16px;
-        height: 16px;
+        width: 16px; height: 16px;
     }
     QComboBox QAbstractItemView {
-        background: white;
-        border: 1px solid #C8E6C9;
-        border-radius: 8px;
-        selection-background-color: #E8F5E9;
-        selection-color: #1B5E20;
-        font-size: 13px;
-        padding: 4px;
-        outline: none;
+        background: white; border: 1px solid #C8E6C9; border-radius: 8px;
+        selection-background-color: #E8F5E9; selection-color: #1B5E20;
+        font-size: 13px; padding: 4px; outline: none;
     }
     QComboBox QAbstractItemView::item {
-        padding: 8px 12px;
-        min-height: 30px;
-        border-radius: 4px;
-        color: #212121;
+        padding: 8px 12px; min-height: 30px; border-radius: 4px; color: #212121;
     }
-    QComboBox QAbstractItemView::item:selected {
-        background: #E8F5E9;
-        color: #2E7D32;
-    }
-)";
-
-    QString dateStyle = R"(
-    QDateEdit {
-        background: #FBFFF7;
-        border: 1px solid #A5D6A7;
-        border-radius: 8px;
-        padding: 5px 10px 5px 32px;
-        font-size: 13px;
-        color: #2E7D32;
-        font-weight: 500;
-        min-height: 32px;
-    }
-    QDateEdit:hover {
-        background: #E8F5E9;
-        border-color: #2E7D32;
-    }
-    QDateEdit:focus {
-        border-color: #2E7D32;
-        background: #E8F5E9;
-    }
-    QDateEdit::drop-down {
-        subcontrol-origin: padding;
-        subcontrol-position: left center;
-        width: 28px;
-        border: none;
-        background: transparent;
-    }
-    QDateEdit::down-arrow {
-        image: url(:/icons/chevron-down.svg);
-        width: 16px;
-        height: 16px;
-    }
-    QCalendarWidget QWidget {
-        background: white;
-        color: #212121;
-        font-size: 12px;
-    }
-    QCalendarWidget QToolButton {
-        background: #E8F5E9;
-        color: #2E7D32;
-        border: none;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        padding: 4px 8px;
-    }
-    QCalendarWidget QToolButton:hover { background: #C8E6C9; }
-    QCalendarWidget QAbstractItemView:enabled {
-        color: #212121;
-        selection-background-color: #2E7D32;
-        selection-color: white;
-    }
-    QCalendarWidget QAbstractItemView:disabled { color: #BDBDBD; }
+    QComboBox QAbstractItemView::item:selected { background: #E8F5E9; color: #2E7D32; }
 )";
 
     ui->animalTypeCombo->setStyleSheet(comboStyle);
     ui->statusCombo->setStyleSheet(comboStyle);
     ui->vaccineTypeCombo->setStyleSheet(comboStyle);
 
-
-    ;
-
     setStyleSheet(R"(
         QWidget { background: transparent; }
-
         QWidget#filterCard {
-            background: white;
-            border: 0.5px solid #E0E0E0;
-            border-radius: 10px;
+            background: white; border: 0.5px solid #E0E0E0; border-radius: 10px;
         }
-        QLabel#pageTitle {
-            font-size: 14px;
-            font-weight: 500;
-            color: #212121;
-        }
-        QLabel#dateModeLabel, QLabel#dateToLabel {
-            font-size: 12px;
-            color: #757575;
-        }
+        QLabel#pageTitle { font-size: 14px; font-weight: 500; color: #212121; }
+        QLabel#dateModeLabel, QLabel#dateToLabel { font-size: 12px; color: #757575; }
         QLineEdit#searchEdit {
-            background: white;
-            border: 1px solid #C8E6C9;
-            border-radius: 8px;
-            padding: 5px 12px;
-            font-size: 12px;
-            color: #212121;
-            min-height: 32px;
+            background: white; border: 1px solid #C8E6C9; border-radius: 8px;
+            padding: 5px 12px; font-size: 12px; color: #212121; min-height: 32px;
         }
         QLineEdit#searchEdit:focus { border-color: #2E7D32; }
-
         QFrame#filterDivider { color: #F0F0F0; }
-
         QPushButton#btnModeSingle, QPushButton#btnModeRange {
-            background: #F5F5F5;
-            border: 1px solid #C8E6C9;
-            font-size: 12px;
-            color: #757575;
-            padding: 0 12px;
-            min-height: 32px;
-            border-radius: 0px;
+            background: #F5F5F5; border: 1px solid #C8E6C9;
+            font-size: 12px; color: #757575; padding: 0 12px;
+            min-height: 32px; border-radius: 0px;
         }
         QPushButton#btnModeSingle {
-            border-top-right-radius: 8px;
-            border-bottom-right-radius: 8px;
-            border-left: none;
+            border-top-right-radius: 8px; border-bottom-right-radius: 8px; border-left: none;
         }
         QPushButton#btnModeRange {
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
+            border-top-left-radius: 8px; border-bottom-left-radius: 8px;
         }
-        QPushButton#btnModeSingle:checked,
-        QPushButton#btnModeRange:checked {
-            background: #2E7D32;
-            color: white;
-            border-color: #2E7D32;
+        QPushButton#btnModeSingle:checked, QPushButton#btnModeRange:checked {
+            background: #2E7D32; color: white; border-color: #2E7D32;
         }
-
         QPushButton#btnClearDate {
-            background: white;
-            border: 1px solid #C8E6C9;
-            border-radius: 8px;
-            font-size: 11px;
-            color: #757575;
-            padding: 0 10px;
-            min-height: 32px;
+            background: white; border: 1px solid #C8E6C9; border-radius: 8px;
+            font-size: 11px; color: #757575; padding: 0 10px; min-height: 32px;
         }
         QPushButton#btnClearDate:hover { border-color: #E53935; color: #E53935; }
-
         QPushButton#btnAddVaccine {
-            background: #2E7D32;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 500;
-            padding: 0 16px;
-            min-height: 36px;
+            background: #2E7D32; color: white; border: none; border-radius: 8px;
+            font-size: 12px; font-weight: 500; padding: 0 16px; min-height: 36px;
         }
         QPushButton#btnAddVaccine:hover { background: #1B5E20; }
-
-        /* Statistics cards */
         QWidget#statCardTotal {
-            background: white;
-            border: 0.5px solid #E0E0E0;
-            border-radius: 10px;
+            background: white; border: 0.5px solid #E0E0E0; border-radius: 10px;
         }
         QWidget#statCardToday {
-            background: white;
-            border: 0.5px solid #F9A825;
-            border-radius: 10px;
+            background: white; border: 0.5px solid #F9A825; border-radius: 10px;
         }
         QWidget#statCardOverdue {
-            background: white;
-            border: 0.5px solid #FFCDD2;
-            border-radius: 10px;
+            background: white; border: 0.5px solid #FFCDD2; border-radius: 10px;
         }
         QLabel#lblTotalTitle, QLabel#lblTodayTitle, QLabel#lblOverdueTitle {
             font-size: 11px; color: #757575; background: transparent;
@@ -384,41 +249,23 @@ void VaccinationsWidget::applyStyle()
         QLabel#lblTotalCount  { font-size:22px; font-weight:500; color:#2E7D32;  background:transparent; }
         QLabel#lblTodayCount  { font-size:22px; font-weight:500; color:#F9A825;  background:transparent; }
         QLabel#lblOverdueCount{ font-size:22px; font-weight:500; color:#C62828;  background:transparent; }
-
-        /* table */
         QWidget#tableCard {
-            background: white;
-            border: 0.5px solid #E0E0E0;
-            border-radius: 10px;
+            background: white; border: 0.5px solid #E0E0E0; border-radius: 10px;
         }
         QTableWidget {
-            background: white;
-            border: none;
-            gridline-color: #F5F5F5;
-            font-size: 12px;
-            outline: none;
+            background: white; border: none; gridline-color: #F5F5F5;
+            font-size: 12px; outline: none;
         }
         QTableWidget::item {
-            padding: 8px 10px;
-            color: #212121;
-            border-bottom: 0.5px solid #F5F5F5;
+            padding: 8px 10px; color: #212121; border-bottom: 0.5px solid #F5F5F5;
         }
-        QTableWidget::item:selected {
-            background: #E8F5E9;
-            color: #212121;
-        }
+        QTableWidget::item:selected { background: #E8F5E9; color: #212121; }
         QHeaderView::section {
-            background: #FAFAFA;
-            color: #757575;
-            font-size: 12px;
-            font-weight: 500;
-            border: none;
-            border-bottom: 0.5px solid #E0E0E0;
-            padding: 8px 10px;
+            background: #FAFAFA; color: #757575; font-size: 12px; font-weight: 500;
+            border: none; border-bottom: 0.5px solid #E0E0E0; padding: 8px 10px;
         }
     )");
 
-    // label align right
     ui->pageTitle->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui->dateModeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui->lblTotalTitle->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -429,7 +276,6 @@ void VaccinationsWidget::applyStyle()
     ui->lblOverdueCount->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 }
 
-//  loadVaccineTypeCombo
 void VaccinationsWidget::loadVaccineTypeCombo()
 {
     int animalTypeIdx = ui->animalTypeCombo->currentIndex();
@@ -440,18 +286,15 @@ void VaccinationsWidget::loadVaccineTypeCombo()
 
     QSqlQuery q;
     if (animalTypeIdx == 0) {
-        // همه انواع — همه واکسن‌ها
         q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
     } else {
-        // فقط واکسن‌های مرتبط با نوع حیوان انتخابی
-        // animal_types.id=1→سگ, id=2→گربه (ترتیب با انتخاب کامبو: idx1=سگ, idx2=گربه)
         q.prepare(
             "SELECT DISTINCT vt.id, vt.name "
             "FROM vaccine_types vt "
             "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
             "WHERE vta.animal_type_id = :atid "
             "ORDER BY vt.name");
-        q.bindValue(":atid", animalTypeIdx);  // idx1=1(سگ), idx2=2(گربه)
+        q.bindValue(":atid", animalTypeIdx);
     }
     q.exec();
     while (q.next())
@@ -461,8 +304,6 @@ void VaccinationsWidget::loadVaccineTypeCombo()
     ui->vaccineTypeCombo->blockSignals(false);
 }
 
-
-//  Event handlers
 void VaccinationsWidget::onDateModeChanged()
 {
     QPushButton* btn = qobject_cast<QPushButton*>(sender());
@@ -496,7 +337,6 @@ void VaccinationsWidget::onFiltersChanged()
     loadTable();
 }
 
-//  loadStats
 void VaccinationsWidget::loadStats()
 {
     QSqlQuery q;
@@ -524,12 +364,11 @@ void VaccinationsWidget::loadStats()
     if (q.next()) ui->lblOverdueCount->setText(q.value(0).toString());
 }
 
-//  buildWhereClause — بدون LIMIT، مشترک بین loadTable و PDF
 QString VaccinationsWidget::buildWhereClause() const
 {
-    QString search       = ui->searchEdit->text().trimmed();
+    QString search        = ui->searchEdit->text().trimmed();
     int     animalTypeIdx = ui->animalTypeCombo->currentIndex();
-    int     statusIdx    = ui->statusCombo->currentIndex();
+    int     statusIdx     = ui->statusCombo->currentIndex();
     int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
 
     QString where = "WHERE TRUE ";
@@ -550,13 +389,12 @@ QString VaccinationsWidget::buildWhereClause() const
     else
         where += "AND v.vaccinated_at BETWEEN :dfrom AND :dto ";
 
-    // وضعیت — در کوئری اصلی فیلتر می‌کنیم تا pagination درست باشه
     QDate today = QDate::currentDate();
-    if (statusIdx == 1)      // موعد رسیده
+    if (statusIdx == 1)
         where += QString("AND v.next_reminder_at = '%1' ").arg(today.toString("yyyy-MM-dd"));
-    else if (statusIdx == 2) // تمدید شده
+    else if (statusIdx == 2)
         where += QString("AND v.next_reminder_at > '%1' ").arg(today.toString("yyyy-MM-dd"));
-    else if (statusIdx == 3) // تأخیر دارد
+    else if (statusIdx == 3)
         where += QString("AND v.next_reminder_at < '%1' ").arg(today.toString("yyyy-MM-dd"));
 
     return where;
@@ -564,7 +402,7 @@ QString VaccinationsWidget::buildWhereClause() const
 
 void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
 {
-    QString search       = ui->searchEdit->text().trimmed();
+    QString search        = ui->searchEdit->text().trimmed();
     int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
 
     if (!search.isEmpty()) {
@@ -584,7 +422,6 @@ void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
     }
 }
 
-//  loadTable — reset + first page
 void VaccinationsWidget::loadTable()
 {
     auto* tbl = ui->vaccinationsTable;
@@ -614,23 +451,18 @@ void VaccinationsWidget::loadTable()
 
     tbl->verticalScrollBar()->setStyleSheet(R"(
         QScrollBar:vertical {
-            background: transparent; width: 6px;
-            border-radius: 3px; margin: 0px;
+            background: transparent; width: 6px; border-radius: 3px; margin: 0px;
         }
         QScrollBar::handle:vertical {
-            background: rgba(100,170,80,180);
-            border-radius: 3px; min-height: 30px;
+            background: rgba(100,170,80,180); border-radius: 3px; min-height: 30px;
         }
         QScrollBar::handle:vertical:hover { background: rgba(46,125,50,220); }
-        QScrollBar::add-line:vertical,
-        QScrollBar::sub-line:vertical { height: 0px; }
-        QScrollBar::add-page:vertical,
-        QScrollBar::sub-page:vertical { background: transparent; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
     tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // حذف دکمه نمایش بیشتر قدیمی — دقیقاً مثل reminders
     if (m_loadMoreBtn) {
         auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
         if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
@@ -642,7 +474,6 @@ void VaccinationsWidget::loadTable()
     appendRows(0);
 }
 
-//  appendRows — یک صفحه اضافه می‌کند
 void VaccinationsWidget::appendRows(int offset)
 {
     auto* tbl = ui->vaccinationsTable;
@@ -664,7 +495,7 @@ void VaccinationsWidget::appendRows(int offset)
     QSqlQuery q;
     q.prepare(sql);
     bindWhereParams(q);
-    q.bindValue(":limit",  kPageSize + 1); // یه تا اضافه تا بفهمیم صفحه بعدی هست
+    q.bindValue(":limit",  kPageSize + 1);
     q.bindValue(":offset", offset);
     if (!q.exec()) return;
 
@@ -680,7 +511,7 @@ void VaccinationsWidget::appendRows(int offset)
 
     while (q.next()) {
         fetched++;
-        if (fetched > kPageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+        if (fetched > kPageSize) break;
 
         int     vacId       = q.value("id").toInt();
         QString animalName  = q.value("animal_name").toString();
@@ -725,7 +556,6 @@ void VaccinationsWidget::appendRows(int offset)
     else
         m_offset = offset + fetched;
 
-    // مدیریت دکمه نمایش بیشتر — دقیقاً مثل reminders
     auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
 
     if (hasMore) {
@@ -734,15 +564,10 @@ void VaccinationsWidget::appendRows(int offset)
                 QString("نمایش بیشتر  (در حال نمایش %1 ردیف)").arg(m_offset));
             m_loadMoreBtn->setStyleSheet(R"(
                 QPushButton {
-                    background: #F1F8E9;
-                    border: none;
+                    background: #F1F8E9; border: none;
                     border-top: 0.5px solid #C8E6C9;
-                    border-bottom-left-radius: 10px;
-                    border-bottom-right-radius: 10px;
-                    color: #2E7D32;
-                    font-size: 12px;
-                    font-weight: 500;
-                    padding: 10px;
+                    border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;
+                    color: #2E7D32; font-size: 12px; font-weight: 500; padding: 10px;
                 }
                 QPushButton:hover { background: #E8F5E9; }
                 QPushButton:pressed { background: #C8E6C9; }
@@ -764,8 +589,6 @@ void VaccinationsWidget::appendRows(int offset)
     }
 }
 
-
-//  makeBadge
 QWidget* VaccinationsWidget::makeBadge(const QString& text,
                                        const QString& bg,
                                        const QString& fg)
@@ -790,47 +613,34 @@ QWidget* VaccinationsWidget::makeBadge(const QString& text,
     return container;
 }
 
-//  makeActionButtons
 QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
 {
+    // outer: پر می‌کنه کل cell رو
     auto* container = new QWidget;
     container->setStyleSheet("background: transparent;");
-    auto* lay = new QHBoxLayout(container);
-    lay->setContentsMargins(6, 4, 6, 4);
+    auto* outerLay = new QVBoxLayout(container);
+    outerLay->setContentsMargins(0,0,0,0);
+    outerLay->setSpacing(0);
+    outerLay->setAlignment(Qt::AlignVCenter);
+
+    // inner: دکمه‌ها رو کنار هم نگه میداره
+    auto* inner = new QWidget;
+    inner->setStyleSheet("background: transparent;");
+    auto* lay = new QHBoxLayout(inner);
+    lay->setContentsMargins(6, 0, 6, 0);
     lay->setSpacing(6);
     lay->setAlignment(Qt::AlignCenter);
+    outerLay->addWidget(inner, 0, Qt::AlignVCenter);
 
-    // Edit button
+    // Edit button — visible for all roles
     auto* btnEdit = new QPushButton("ویرایش");
-    btnEdit->setFixedHeight(27);
+    btnEdit->setFixedSize(60, 28);
     btnEdit->setStyleSheet(R"(
         QPushButton {
-            background: white;
-            border: 0.5px solid #E0E0E0;
-            border-radius: 6px;
-            font-size: 11px;
-            color: #555555;
-            padding: 0 10px;
+            background: white; border: 0.5px solid #E0E0E0;
+            border-radius: 6px; font-size: 11px; color: #555555;
         }
         QPushButton:hover { border-color: #2E7D32; color: #2E7D32; }
-    )");
-
-    // delete button
-    auto* btnDel = new QPushButton("حذف");
-    btnDel->setFixedHeight(27);
-    btnDel->setStyleSheet(R"(
-        QPushButton {
-            background: #FFEBEE;
-            border: 0.5px solid #FFCDD2;
-            border-radius: 6px;
-            font-size: 11px;
-            color: #E53935;
-            padding: 0 10px;
-        }
-        QPushButton:hover {
-            background: #FFCDD2;
-            border-color: #E53935;
-        }
     )");
 
     connect(btnEdit, &QPushButton::clicked, this, [this, vaccinationId]() {
@@ -840,34 +650,46 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
         q.exec();
         if (!q.next()) return;
         int animalId = q.value("animal_id").toInt();
-        AddVaccineDialog dlg(animalId, vaccinationId, this);  // edit mode
+        AddVaccineDialog dlg(animalId, vaccinationId, this);
         if (dlg.exec() == QDialog::Accepted) loadData();
     });
 
-    connect(btnDel, &QPushButton::clicked, this, [this, vaccinationId]() {
-        auto reply = QMessageBox::question(
-            this, "حذف واکسن",
-            "آیا مطمئن هستید که می‌خواهید این واکسن را حذف کنید؟",
-            QMessageBox::Yes | QMessageBox::No
-            );
-        if (reply != QMessageBox::Yes) return;
-
-        QSqlQuery q;
-        q.prepare("UPDATE reminder_followups SET is_resolved=TRUE WHERE vaccination_id=:id");
-        q.bindValue(":id", vaccinationId); q.exec();
-
-        q.prepare("DELETE FROM vaccinations WHERE id=:id");
-        q.bindValue(":id", vaccinationId); q.exec();
-
-        loadData();
-    });
-
     lay->addWidget(btnEdit);
-    lay->addWidget(btnDel);
+
+    // Delete button — admin only
+    if (Session::instance().isAdmin()) {
+        auto* btnDel = new QPushButton("حذف");
+        btnDel->setFixedSize(50, 28);
+        btnDel->setStyleSheet(R"(
+            QPushButton {
+                background: #FFEBEE; border: 0.5px solid #FFCDD2;
+                border-radius: 6px; font-size: 11px; color: #E53935; padding: 0 10px;
+            }
+            QPushButton:hover { background: #FFCDD2; border-color: #E53935; }
+        )");
+
+        connect(btnDel, &QPushButton::clicked, this, [this, vaccinationId]() {
+            if (!StyledMessageBox::question(
+                    this, "حذف واکسن",
+                    "آیا مطمئن هستید که می‌خواهید این واکسن را حذف کنید؟"))
+                return;
+
+            QSqlQuery q;
+            q.prepare("UPDATE reminder_followups SET is_resolved=TRUE WHERE vaccination_id=:id");
+            q.bindValue(":id", vaccinationId); q.exec();
+
+            q.prepare("DELETE FROM vaccinations WHERE id=:id");
+            q.bindValue(":id", vaccinationId); q.exec();
+
+            loadData();
+        });
+
+        lay->addWidget(btnDel);
+    }
+
     return container;
 }
 
-//  showAnimalPickerDialog
 int VaccinationsWidget::showAnimalPickerDialog()
 {
     QDialog picker(this);
@@ -881,7 +703,6 @@ int VaccinationsWidget::showAnimalPickerDialog()
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
 
-    // Header
     auto* header = new QWidget;
     header->setObjectName("pickerHeader");
     header->setStyleSheet(
@@ -904,7 +725,6 @@ int VaccinationsWidget::showAnimalPickerDialog()
     headerLay->addWidget(headerTitle);
     headerLay->addStretch();
 
-    // ── Body ──
     auto* body = new QWidget;
     body->setStyleSheet("QWidget { background:white; }");
     auto* bodyLay = new QVBoxLayout(body);
@@ -920,13 +740,9 @@ int VaccinationsWidget::showAnimalPickerDialog()
     searchLine->setLayoutDirection(Qt::RightToLeft);
     searchLine->setStyleSheet(R"(
         QLineEdit {
-            border: 1px solid #C8E6C9;
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 13px;
-            background: #F9FBF9;
-            color: #212121;
-            min-height: 36px;
+            border: 1px solid #C8E6C9; border-radius: 8px;
+            padding: 8px 12px; font-size: 13px;
+            background: #F9FBF9; color: #212121; min-height: 36px;
         }
         QLineEdit:focus { border-color:#2E7D32; background:white; }
     )");
@@ -936,49 +752,29 @@ int VaccinationsWidget::showAnimalPickerDialog()
     listW->setLayoutDirection(Qt::RightToLeft);
     listW->setStyleSheet(R"(
     QListWidget {
-        border: 1px solid #E0E0E0;
-        border-radius: 8px;
-        background: white;
-        font-size: 13px;
-        outline: none;
+        border: 1px solid #E0E0E0; border-radius: 8px;
+        background: white; font-size: 13px; outline: none;
     }
-    QListWidget::item {
-        padding: 12px 14px;
-        border-bottom: 0.5px solid #F5F5F5;
-    }
+    QListWidget::item { padding: 12px 14px; border-bottom: 0.5px solid #F5F5F5; }
     QListWidget::item:hover    { background: #F5F5F5; }
     QListWidget::item:selected { background: #E8F5E9; color: #212121; }
-
     QScrollBar:vertical {
-        background: #F5F5F5;
-        width: 6px;
-        border-radius: 3px;
-        margin: 4px 2px;
+        background: #F5F5F5; width: 6px; border-radius: 3px; margin: 4px 2px;
     }
     QScrollBar::handle:vertical {
-        background: #A5D6A7;
-        border-radius: 3px;
-        min-height: 30px;
+        background: #A5D6A7; border-radius: 3px; min-height: 30px;
     }
-    QScrollBar::handle:vertical:hover {
-        background: #2E7D32;
-    }
-    QScrollBar::add-line:vertical,
-    QScrollBar::sub-line:vertical { height: 0px; }
-    QScrollBar::add-page:vertical,
-    QScrollBar::sub-page:vertical { background: transparent; }
+    QScrollBar::handle:vertical:hover { background: #2E7D32; }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 )");
-
 
     bodyLay->addWidget(hint);
     bodyLay->addWidget(searchLine);
     bodyLay->addWidget(listW, 1);
 
-    // ── Footer ──
     auto* footer = new QWidget;
-    footer->setStyleSheet(
-        "QWidget { background:#FAFAFA; border-top:1px solid #E0E0E0; }"
-        );
+    footer->setStyleSheet("QWidget { background:#FAFAFA; border-top:1px solid #E0E0E0; }");
     footer->setFixedHeight(60);
     auto* footerLay = new QHBoxLayout(footer);
     footerLay->setContentsMargins(20, 0, 20, 0);
@@ -990,8 +786,7 @@ int VaccinationsWidget::showAnimalPickerDialog()
     btnConfirm->setEnabled(false);
     btnConfirm->setStyleSheet(R"(
         QPushButton {
-            background:#2E7D32; color:white;
-            border:none; border-radius:8px;
+            background:#2E7D32; color:white; border:none; border-radius:8px;
             font-size:13px; font-weight:bold; padding:0 20px;
         }
         QPushButton:hover   { background:#388E3C; }
@@ -1003,9 +798,8 @@ int VaccinationsWidget::showAnimalPickerDialog()
     btnCancel->setFixedHeight(36);
     btnCancel->setStyleSheet(R"(
         QPushButton {
-            background:white; color:#757575;
-            border:1px solid #E0E0E0; border-radius:8px;
-            font-size:13px; padding:0 20px;
+            background:white; color:#757575; border:1px solid #E0E0E0;
+            border-radius:8px; font-size:13px; padding:0 20px;
         }
         QPushButton:hover { background:#F5F5F5; }
     )");
@@ -1018,7 +812,6 @@ int VaccinationsWidget::showAnimalPickerDialog()
     mainLay->addWidget(body, 1);
     mainLay->addWidget(footer);
 
-    // ── loading animals ──
     auto loadAnimals = [&](const QString& filter) {
         listW->clear();
         QSqlQuery q;
@@ -1055,7 +848,6 @@ int VaccinationsWidget::showAnimalPickerDialog()
 
     connect(searchLine, &QLineEdit::textChanged,
             [&](const QString& t){ loadAnimals(t); });
-
     connect(listW, &QListWidget::itemSelectionChanged, [&](){
         btnConfirm->setEnabled(listW->currentItem() != nullptr);
     });
@@ -1070,7 +862,6 @@ int VaccinationsWidget::showAnimalPickerDialog()
     return listW->currentItem()->data(Qt::UserRole).toInt();
 }
 
-//  onAddVaccineClicked
 void VaccinationsWidget::onAddVaccineClicked()
 {
     int animalId = showAnimalPickerDialog();
@@ -1079,6 +870,6 @@ void VaccinationsWidget::onAddVaccineClicked()
     AddVaccineDialog dlg(animalId, this);
     if (dlg.exec() != QDialog::Accepted) return;
 
-    QMessageBox::information(this, "موفق", "واکسن با موفقیت ثبت شد.");
+    StyledMessageBox::success(this, "موفق", "واکسن با موفقیت ثبت شد.");
     loadData();
 }

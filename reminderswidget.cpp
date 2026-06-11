@@ -5,6 +5,7 @@
 #include "ui_reminderswidget.h"
 #include "addvaccinedialog.h"
 #include "persiandate.h"
+#include "session.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -45,10 +46,10 @@ RemindersWidget::RemindersWidget(QWidget *parent)
     connect(ui->vaccineTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RemindersWidget::onFiltersChanged);
 
-    // ── ساخت widget فیلتر تاریخ ──────────────────────────────────────────────
+    // ── Create a date filter widget ─
     buildFilterDateWidget();
 
-    // لود اولیه واکسن‌ها
+    // Initial load of vaccines
     loadVaccineTypeCombo();
     connect(ui->followUpCombo,   QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RemindersWidget::onFiltersChanged);
@@ -342,10 +343,10 @@ void RemindersWidget::buildFilterDateWidget()
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(6);
 
-    // ── کامبو انتخاب حالت (بر اساس روز / بازه تاریخ) ────────────────────
+    // ── Combo mode selection (based on day/date range) ─
     m_subModeCombo = new QComboBox;
-    m_subModeCombo->addItem("بر اساس روز", 0);   // index 0 = حالت دستی
-    m_subModeCombo->addItem("بازه تاریخ",  1);   // index 1 = بازه
+    m_subModeCombo->addItem("بر اساس روز", 0);   // index 0 = day
+    m_subModeCombo->addItem("بازه تاریخ",  1);   // index 1 = date picker
     m_subModeCombo->setLayoutDirection(Qt::RightToLeft);
     m_subModeCombo->setStyleSheet(R"(
         QComboBox {
@@ -378,7 +379,7 @@ void RemindersWidget::buildFilterDateWidget()
     )");
     mainLay->addWidget(m_subModeCombo);
 
-    // ── ستون دستی (بر اساس روز) ──────────────────────────────────────────
+    // ── Manual column (based on day) ──────────────────────────────────────────
     auto* manualWidget = new QWidget;
     manualWidget->setStyleSheet("background:transparent;");
     auto* manualLay = new QHBoxLayout(manualWidget);
@@ -403,11 +404,11 @@ void RemindersWidget::buildFilterDateWidget()
         }
     )");
 
-    // ── toggle button آینده/گذشته ─────────────────────────────────────────
+    // ── toggle button Future/Past ─────────────────────────────────────────
     m_dirBtn = new QPushButton("روز آینده");
-    m_dirBtn->setProperty("isFuture", true);   // دیفالت: روز آینده
+    m_dirBtn->setProperty("isFuture", true);   // Default: next day
     m_dirBtn->setFixedHeight(32);
-    m_dirBtn->setFixedWidth(88);               // عرض کمتر
+    m_dirBtn->setFixedWidth(88);
     m_dirBtn->setCursor(Qt::PointingHandCursor);
     m_dirBtn->setStyleSheet(R"(
         QPushButton {
@@ -422,7 +423,7 @@ void RemindersWidget::buildFilterDateWidget()
         QPushButton:hover   { background: #E8F5E9; border-color: #2E7D32; }
         QPushButton:pressed { background: #C8E6C9; }
     )");
-    // کلیک → تغییر حالت
+    // Click → Change state
     connect(m_dirBtn, &QPushButton::clicked, this, [this]() {
         bool wasFuture = m_dirBtn->property("isFuture").toBool();
         m_dirBtn->setProperty("isFuture", !wasFuture);
@@ -434,7 +435,7 @@ void RemindersWidget::buildFilterDateWidget()
     manualLay->addWidget(m_dirBtn);
     mainLay->addWidget(manualWidget);
 
-    // ── ستون بازه تاریخ ──────────────────────────────────────────────────
+    // ── Date range column ──────────────────────────────────────────────────
     auto* rangeWidget = new QWidget;
     rangeWidget->setStyleSheet("background:transparent;min-height: 32px;");
     rangeWidget->setVisible(false);
@@ -463,7 +464,7 @@ void RemindersWidget::buildFilterDateWidget()
 
     mainLay->addStretch();
 
-    // ── جایگزاری در container ─────────────────────────────────────────────
+    // ── Placement in container ─────────────────────────────────────────────
     if (ui->filterDateContainer->layout())
         delete ui->filterDateContainer->layout();
     auto* containerLay = new QVBoxLayout(ui->filterDateContainer);
@@ -588,15 +589,15 @@ void RemindersWidget::bindWhereParams(QSqlQuery& q) const
     if (!modeToday) {
         if (m_subManualMode) {
             int days = m_daysSpin ? m_daysSpin->value() : 7;
-            // ✅ از property به جای currentIndex
+            // from property instead of currentIndex
             bool isFuture = m_dirBtn ? m_dirBtn->property("isFuture").toBool() : true;
             if (isFuture) {
-                // از امروز تا n روز بعد
+                // from today until n days later
                 q.bindValue(":overdueFrom", today);
                 q.bindValue(":overdueTo",
                             QDate::currentDate().addDays(days).toString("yyyy-MM-dd"));
             } else {
-                // از n روز قبل تا امروز
+                // from n days ago to today
                 q.bindValue(":overdueFrom",
                             QDate::currentDate().addDays(-days).toString("yyyy-MM-dd"));
                 q.bindValue(":overdueTo", today);

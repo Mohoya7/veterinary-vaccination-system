@@ -24,6 +24,12 @@ qt_add_executable(VetProject
     persiandate.h
     animaltypeinfo.h
     persiandatepicker.h persiandatepicker.cpp
+    session.h
+
+    userstab.h userstab.cpp
+    animaltypestab.h animaltypestab.cpp
+    backuptab.h backuptab.cpp
+    abouttab.h abouttab.cpp
 
 
 )

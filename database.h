@@ -31,7 +31,7 @@ public:
     // Format: YYYY + TT + SSSSS
     // YYYY = Solar Year | TT = animal_type_id (01, 02, ...) | SSSSS = 5-digit sequential number
     static QString generateFileNumber(int animalTypeId) {
-        // سال شمسی از PersianDate
+        // Solar year from PersianDate
         int jy, jm, jd;
         PersianDate::toJalali(QDate::currentDate(), jy, jm, jd);
 

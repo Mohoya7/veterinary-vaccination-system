@@ -2,17 +2,17 @@
 #define PERSIANDATE_H
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PersianDate — تبدیل دقیق میلادی ↔ شمسی
+// PersianDate — Accurate Gregorian ↔ Solar Conversion
 //
-// روش: جدول نوروزهای تأیید‌شده نجومی + محاسبه ساده روزهای داخل سال
+// Method: Astronomically verified Nowruz table + simple calculation of days in the year
 //
-// پوشش: سال‌های ۱۳۴۰ تا ۱۴۱۰ شمسی (۱۹۶۱ تا ۲۰۳۱ میلادی)
-// همه edge caseها پوشش داده شده:
-//   • نوروزهایی که ۲۰ مارس‌اند (مثل ۱۴۰۳ و ۱۴۰۴)
-//   • آخرین روز اسفند (۲۹ یا ۳۰)
-//   • کبیسه شمسی
+// Coverage: Years 1340 to 1410 Solar (1961 to 2031 AD)
+// All edge cases covered:
+// • Nowruz that are on March 20 (e.g. 1403 and 1404)
+// • Last day of Esfand (29 or 30)
+// • Leap year
 //
-// تأیید: جدول نوروز از USNO Astronomical Applications + مراجع رسمی ایران
+// Verification: Nowruz table from USNO Astronomical Applications + official Iranian sources
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <QDate>
@@ -21,8 +21,8 @@
 
 namespace PersianDate {
 
-// ── جدول نوروزهای تأیید‌شده ─────────────────────────────────────────────────
-// کلید: سال شمسی  →  مقدار: اول فروردین همان سال (میلادی)
+// ── Confirmed Nowruz schedule ─────────────────────────────────────────────────
+// Key: Solar Year → Value: 1st of Farvardin of the same year (Gregorian)
 
 inline const QMap<int, QDate>& nowruzTable()
 {
@@ -72,7 +72,7 @@ inline const QMap<int, QDate>& nowruzTable()
     return tbl;
 }
 
-// ── تبدیل QDate میلادی → شمسی ───────────────────────────────────────────────
+// ── Convert QDate Gregorian → Solar ───────────────────────────────────────────────
 
 inline bool toJalali(const QDate& date, int& jy, int& jm, int& jd)
 {
@@ -80,7 +80,7 @@ inline bool toJalali(const QDate& date, int& jy, int& jm, int& jd)
 
     const auto& tbl = nowruzTable();
 
-    // تخمین سال شمسی
+    // Estimation of the solar year
     int approx = date.year() - 621;
 
     for (int try_jy = approx - 1; try_jy <= approx + 1; ++try_jy) {
@@ -94,11 +94,11 @@ inline bool toJalali(const QDate& date, int& jy, int& jm, int& jd)
             int dayOfYear = nowruz.daysTo(date); // 0-indexed
 
             if (dayOfYear < 6 * 31) {
-                // ماه‌های اول تا ششم — هر کدام ۳۱ روز
+                // Months 1 to 6 — 31 days each
                 jm = dayOfYear / 31 + 1;
                 jd = dayOfYear % 31 + 1;
             } else {
-                // ماه‌های هفتم تا دوازدهم — هر کدام ۳۰ روز (اسفند ۲۹ یا ۳۰)
+                // Months 7-12 — 30 days each (March 29 or 30)
                 int remaining = dayOfYear - 6 * 31;
                 jm = remaining / 30 + 7;
                 jd = remaining % 30 + 1;
@@ -110,7 +110,7 @@ inline bool toJalali(const QDate& date, int& jy, int& jm, int& jd)
     return false;
 }
 
-// ── تبدیل شمسی → QDate میلادی ───────────────────────────────────────────────
+// ── Convert solar to Gregorian QDate ───────────────────────────────────────────────
 
 inline QDate fromJalali(int jy, int jm, int jd)
 {
@@ -128,7 +128,7 @@ inline QDate fromJalali(int jy, int jm, int jd)
     return nowruz.addDays(dayOfYear);
 }
 
-// ── نام‌های فارسی ماه ────────────────────────────────────────────────────────
+// ── Persian names of the months ────────────────────────────────────────────────────────
 
 inline QString monthName(int jm)
 {
@@ -142,7 +142,7 @@ inline QString monthName(int jm)
     return names[jm];
 }
 
-// ── تبدیل ارقام لاتین به فارسی ──────────────────────────────────────────────
+// ── Convert Latin numerals to Persian ──────────────────────────────────────────────
 
 inline QString toFarsiDigits(const QString& s)
 {
@@ -157,9 +157,9 @@ inline QString toFarsiDigits(const QString& s)
     return out;
 }
 
-// ── نمایش: QDate میلادی → رشته شمسی ─────────────────────────────────────────
+// Display: Gregorian QDate → Solar string
 
-// فرمت کوتاه: ۱۴۰۴/۰۳/۰۷
+// Short format: 1404/03/07
 inline QString toDisplayShort(const QDate& date)
 {
     if (!date.isValid()) return "—";
@@ -173,7 +173,7 @@ inline QString toDisplayShort(const QDate& date)
         );
 }
 
-// فرمت بلند: ۷ خرداد ۱۴۰۴
+// Long format: 7 June 1404
 inline QString toDisplayLong(const QDate& date)
 {
     if (!date.isValid()) return "—";
@@ -184,9 +184,9 @@ inline QString toDisplayLong(const QDate& date)
            toFarsiDigits(QString::number(jy));
 }
 
-// ── سرچ: رشته شمسی → QDate میلادی ───────────────────────────────────────────
-// ورودی‌های قابل قبول: "1404/03/07" یا "1404-03-07" یا "14040307"
-// ارقام فارسی هم پذیرفته می‌شود
+// ── Search: Solar Date → Gregorian QDate
+// Acceptable inputs: "1404/03/07" or "1404-03-07" or "14040307"
+// Persian digits are also accepted
 
 inline QDate parseJalali(const QString& s)
 {
@@ -210,15 +210,15 @@ inline QDate parseJalali(const QString& s)
     return fromJalali(jy, jm, jd);
 }
 
-// ── توابع کمکی ────────────────────────────────────────────────────────────────
+// Helper functions
 
-// امروز به شمسی (فرمت کوتاه)
+// Today in solar terms (short format)
 inline QString todayDisplay()
 {
     return toDisplayShort(QDate::currentDate());
 }
 
-// QDate → فرمت دیتابیس میلادی "yyyy-MM-dd"
+// QDate → Gregorian database format "yyyy-MM-dd"
 inline QString toDb(const QDate& date)
 {
     return date.toString("yyyy-MM-dd");

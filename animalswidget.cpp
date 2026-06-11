@@ -6,6 +6,7 @@
 #include "styledmessagebox.h"
 #include "persiandate.h"
 #include "animaltypeinfo.h"
+#include "session.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -34,7 +35,6 @@ public:
         lay->setContentsMargins(14, 8, 14, 8);
         lay->setSpacing(10);
 
-        // Avatar with animal type icon
         auto ti = AnimalTypeInfo::get(typeId);
         auto* avatar = new QLabel(ti.emoji);
         avatar->setFixedSize(36, 36);
@@ -77,6 +77,11 @@ AnimalsWidget::AnimalsWidget(QWidget *parent)
     applyStyle();
 
     ui->profileWidget->hide();
+
+    // Hide delete button for non-admin users
+    if (!Session::instance().isAdmin()) {
+        ui->btnDelete->hide();
+    }
 
     // Green scrollbar for animal list
     ui->animalListWidget->verticalScrollBar()->setStyleSheet(R"(
@@ -188,12 +193,6 @@ void AnimalsWidget::applyStyle()
             background: #E8F5E9;
             color: #2E7D32;
         }
-        QComboBox#typeFilterCombo QAbstractItemView {
-            background: white;
-            border: 0.5px solid #C8E6C9;
-            selection-background-color: #E8F5E9;
-            font-size: 12px;
-        }
 
         QListWidget#animalListWidget {
             background: white; border: none; outline: none;
@@ -270,7 +269,6 @@ void AnimalsWidget::applyStyle()
         QLabel#placeholderLabel { color: #BDBDBD; font-size: 14px; }
     )");
 
-    // Scrollbar style for scroll area
     ui->profileScrollArea->verticalScrollBar()->setStyleSheet(R"(
         QScrollBar:vertical {
             background: #F5F5F5; width: 6px;
@@ -291,7 +289,6 @@ void AnimalsWidget::loadAnimals(const QString& search, int typeFilter)
     m_currentOffset = 0;
     ui->animalListWidget->clear();
 
-    // حذف دکمه قدیمی از layout
     if (m_loadMoreBtn) {
         auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
         if (lay) lay->removeWidget(m_loadMoreBtn);
@@ -333,7 +330,7 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
     int fetched = 0;
     while (q.next()) {
         fetched++;
-        if (fetched > m_pageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+        if (fetched > m_pageSize) break;
 
         int     id    = q.value("id").toInt();
         QString name   = q.value("name").toString();
@@ -376,9 +373,6 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
                 QPushButton:hover { background: #E8F5E9; }
                 QPushButton:pressed { background: #C8E6C9; }
             )");
-            // addWidget به انتهای layout اضافه می‌کنه — ولی چون btnAddAnimal
-            // داخل یه QVBoxLayout جداست (نه مستقیم widget)، ما باید
-            // قبل از آخرین آیتم layout اضافه کنیم
             int insertIdx = panelLayout ? panelLayout->count() - 1 : -1;
             if (panelLayout && insertIdx >= 0)
                 panelLayout->insertWidget(insertIdx, m_loadMoreBtn);
@@ -423,7 +417,6 @@ void AnimalsWidget::showAnimalProfile(int animalId)
     auto ti      = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
     QString name = q.value("name").toString();
 
-    // Avatar
     ui->animalAvatarLabel->setText(ti.emoji);
     ui->animalAvatarLabel->setStyleSheet(
         "background:rgba(255,255,255,0.18);border-radius:25px;font-size:20px;");
@@ -435,7 +428,6 @@ void AnimalsWidget::showAnimalProfile(int animalId)
         sub += " | " + q.value("breed").toString();
     ui->animalSubLabel->setText(sub);
 
-    // Info rows
     clearInfoRows();
 
     QString fileNum = q.value("file_number").toString();
@@ -454,7 +446,6 @@ void AnimalsWidget::showAnimalProfile(int animalId)
     addInfoRow(ui->infoRowsContainer, "جنسیت",
                q.value("gender").toString() == "male" ? "نر" : "ماده");
 
-    // Owner button
     QString ownerText = q.value("owner_name").toString()
                         + "   |   " + q.value("phone").toString();
     ui->btnGoToOwner->setText(ownerText);
@@ -471,14 +462,12 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
 void AnimalsWidget::showAnimalById(int animalId)
 {
-    // Find in list or just show profile directly
     for (int i = 0; i < ui->animalListWidget->count(); i++) {
         if (ui->animalListWidget->item(i)->data(Qt::UserRole).toInt() == animalId) {
             ui->animalListWidget->setCurrentRow(i);
             return;
         }
     }
-    // Not in current list — reload without filter then select
     ui->searchEdit->clear();
     ui->typeFilterCombo->setCurrentIndex(0);
     loadAnimals();
@@ -488,7 +477,6 @@ void AnimalsWidget::showAnimalById(int animalId)
             return;
         }
     }
-    // Fallback: just show profile
     showAnimalProfile(animalId);
 }
 
@@ -605,17 +593,30 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
     auto* bodyLay = new QVBoxLayout(body);
     bodyLay->setContentsMargins(16, 16, 16, 16);
 
+    // Determine column count based on role
+    // Admin: 5 columns (vaccine, date, next reminder, status, actions)
+    // Technician: 4 columns (no actions column)
+    bool isAdmin = Session::instance().isAdmin();
+    int colCount = 5;
+
     auto* tbl = new QTableWidget;
-    tbl->setColumnCount(5);
+    tbl->setColumnCount(colCount);
     tbl->setLayoutDirection(Qt::RightToLeft);
+
     QStringList hdrs = {"نوع واکسن", "تاریخ تزریق", "یادآوری بعدی", "وضعیت", "عملیات"};
     tbl->setHorizontalHeaderLabels(hdrs);
+
     auto* hv = tbl->horizontalHeader();
     hv->setLayoutDirection(Qt::RightToLeft);
     hv->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     hv->setSectionResizeMode(QHeaderView::Stretch);
-    hv->setSectionResizeMode(4, QHeaderView::Fixed);
-    tbl->setColumnWidth(4, 150);
+
+    // Fixed width for actions column (admin only)
+    if (isAdmin) {
+        hv->setSectionResizeMode(4, QHeaderView::Fixed);
+        tbl->setColumnWidth(4, 150);
+    }
+
     tbl->verticalHeader()->setVisible(false);
     tbl->setShowGrid(false);
     tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -624,7 +625,7 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
 
     int animalId = m_selectedAnimalId;
 
-    // ─── helper: پر کردن جدول ────────────────────────────
+    // Helper: populate table
     std::function<void()> reloadTable = [&]() {
         tbl->setRowCount(0);
 
@@ -681,58 +682,61 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
             tbl->setItem(row, 2, makeItem(PersianDate::toDisplayShort(nextDate)));
             tbl->setCellWidget(row, 3, makeBadge(st, sb, sf));
 
-            // ─── دکمه‌های ویرایش و حذف ───────────────────
+            // Action buttons — edit for all roles, delete for admin only
             auto* actW = new QWidget; actW->setStyleSheet("background:transparent;");
             auto* actL = new QHBoxLayout(actW);
             actL->setContentsMargins(4, 2, 4, 2);
             actL->setSpacing(4);
 
+            // Edit button — visible for all roles
             auto* editBtn = new QPushButton("ویرایش");
             editBtn->setStyleSheet(R"(
-                QPushButton {
-                    background: white; border: 0.5px solid #C8E6C9;
-                    border-radius: 5px; font-size: 11px;
-                    color: #2E7D32; padding: 2px 8px; min-height: 26px;
-                }
-                QPushButton:hover { background: #E8F5E9; }
-            )");
+    QPushButton {
+        background: white; border: 0.5px solid #C8E6C9;
+        border-radius: 5px; font-size: 11px;
+        color: #2E7D32; padding: 2px 8px; min-height: 26px;
+    }
+    QPushButton:hover { background: #E8F5E9; }
+)");
             connect(editBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
                 AddVaccineDialog dlg(animalId, vacId, &histDialog);
                 if (dlg.exec() == QDialog::Accepted)
                     reloadTable();
             });
-
-            auto* delBtn = new QPushButton("حذف");
-            delBtn->setStyleSheet(R"(
-                QPushButton {
-                    background: white; border: 0.5px solid #FFCDD2;
-                    border-radius: 5px; font-size: 11px;
-                    color: #C62828; padding: 2px 8px; min-height: 26px;
-                }
-                QPushButton:hover { background: #FFEBEE; }
-            )");
-            connect(delBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
-                if (!StyledMessageBox::question(&histDialog, "حذف واکسن",
-                                                "آیا از حذف این واکسن مطمئن هستید؟"))
-                    return;
-                QSqlQuery dq;
-                dq.prepare("DELETE FROM vaccinations WHERE id=:id");
-                dq.bindValue(":id", vacId);
-                if (!dq.exec()) {
-                    StyledMessageBox::error(&histDialog, "خطا", "خطا در حذف واکسن.");
-                    return;
-                }
-                reloadTable();
-            });
-
             actL->addWidget(editBtn);
-            actL->addWidget(delBtn);
+
+            // Delete button — admin only
+            if (isAdmin) {
+                auto* delBtn = new QPushButton("حذف");
+                delBtn->setStyleSheet(R"(
+        QPushButton {
+            background: white; border: 0.5px solid #FFCDD2;
+            border-radius: 5px; font-size: 11px;
+            color: #C62828; padding: 2px 8px; min-height: 26px;
+        }
+        QPushButton:hover { background: #FFEBEE; }
+    )");
+                connect(delBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
+                    if (!StyledMessageBox::question(&histDialog, "حذف واکسن",
+                                                    "آیا از حذف این واکسن مطمئن هستید؟"))
+                        return;
+                    QSqlQuery dq;
+                    dq.prepare("DELETE FROM vaccinations WHERE id=:id");
+                    dq.bindValue(":id", vacId);
+                    if (!dq.exec()) {
+                        StyledMessageBox::error(&histDialog, "خطا", "خطا در حذف واکسن.");
+                        return;
+                    }
+                    reloadTable();
+                });
+                actL->addWidget(delBtn);
+            }
+
             tbl->setCellWidget(row, 4, actW);
 
             row++;
         }
     };
-    // ─────────────────────────────────────────────────────
 
     reloadTable();
     bodyLay->addWidget(tbl, 1);
@@ -778,7 +782,6 @@ void AnimalsWidget::onAnimalSelected(QListWidgetItem* current, QListWidgetItem*)
 
 void AnimalsWidget::onAddAnimalClicked()
 {
-    // Pick owner first
     QDialog picker(this);
     picker.setWindowTitle("انتخاب صاحب");
     picker.setLayoutDirection(Qt::RightToLeft);
@@ -792,11 +795,6 @@ void AnimalsWidget::onAddAnimalClicked()
         QListWidget{border:0.5px solid #E0E0E0;border-radius:6px;font-size:13px;outline:none;}
         QListWidget::item{padding:10px 12px;border-bottom:0.5px solid #F5F5F5;}
         QListWidget::item:selected{background:#E8F5E9;color:#212121;}
-        QPushButton#btnConfirm{background:#2E7D32;color:white;border:none;
-            border-radius:6px;padding:8px 20px;font-size:13px;}
-        QPushButton#btnConfirm:hover{background:#1B5E20;}
-        QPushButton#btnPickCancel{background:white;color:#757575;
-            border:0.5px solid #E0E0E0;border-radius:6px;padding:8px 20px;font-size:13px;}
     )");
 
     auto* lay = new QVBoxLayout(&picker);
@@ -806,7 +804,7 @@ void AnimalsWidget::onAddAnimalClicked()
     auto* lbl = new QLabel("صاحب حیوان را انتخاب کنید:");
     lbl->setAlignment(Qt::AlignLeft);
     auto* searchLine = new QLineEdit;
-    searchLine->setPlaceholderText("جستجو...");
+    searchLine->setPlaceholderText("نام و نام خانوادگی یا شماره تماس را جستوجو کنید.");
     auto* listW = new QListWidget;
     listW->setMinimumHeight(200);
 
@@ -819,10 +817,28 @@ void AnimalsWidget::onAddAnimalClicked()
     btnCancel->setObjectName("btnPickCancel");
     auto* btnConfirm = new QPushButton("انتخاب");
     btnConfirm->setObjectName("btnConfirm");
-    btnConfirm->setEnabled(false);
-    btnLay->addStretch();
-    btnLay->addWidget(btnCancel);
+
+    btnConfirm->setStyleSheet(R"(
+    QPushButton {
+        background: #2E7D32; color: white; border: none;
+        border-radius: 6px; padding: 8px 20px; font-size: 13px;
+        min-width: 50px;
+    }
+    QPushButton:hover { background: #1B5E20; }
+)");
+    btnCancel->setStyleSheet(R"(
+    QPushButton {
+        background: white; color: #757575;
+        border: 0.5px solid #E0E0E0; border-radius: 6px;
+        padding: 8px 20px; font-size: 13px;
+        min-width: 30px;
+    }
+    QPushButton:hover { background: #F5F5F5; }
+)");
+
     btnLay->addWidget(btnConfirm);
+    btnLay->addWidget(btnCancel);
+    btnLay->addStretch();
 
     lay->addWidget(lbl);
     lay->addWidget(searchLine);
@@ -871,7 +887,6 @@ void AnimalsWidget::onAddAnimalClicked()
     loadAnimals();
     showAnimalById(newAnimalId);
 
-    // Ask about vaccine
     bool addVaccine = StyledMessageBox::question(
         this, "افزودن واکسن",
         "آیا می‌خواهید برای این حیوان واکسن اضافه کنید؟");
@@ -914,7 +929,7 @@ void AnimalsWidget::onDeleteAnimalClicked()
     if (!ok) return;
 
     QSqlQuery q;
-    // CASCADE: حذف حیوان → vaccinations → reminder_followups خودکار حذف میشن
+    // CASCADE: delete animal → vaccinations → reminder_followups auto-deleted
     q.prepare("DELETE FROM animals WHERE id=:id");
     q.bindValue(":id", m_selectedAnimalId); q.exec();
 

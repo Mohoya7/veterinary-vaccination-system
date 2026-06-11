@@ -9,6 +9,8 @@ AddOwnerDialog::AddOwnerDialog(QWidget *parent)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
+    if (auto* lo = qobject_cast<QHBoxLayout*>(ui->btnSave->parentWidget()->layout()))
+        lo->setDirection(QBoxLayout::RightToLeft);
     applyStyle();
     connect(ui->btnSave,   &QPushButton::clicked, this, &AddOwnerDialog::onSaveClicked);
     connect(ui->btnCancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -19,6 +21,8 @@ AddOwnerDialog::AddOwnerDialog(int ownerId, QWidget *parent)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
+    if (auto* lo = qobject_cast<QHBoxLayout*>(ui->btnSave->parentWidget()->layout()))
+        lo->setDirection(QBoxLayout::RightToLeft);
     setWindowTitle("ویرایش اطلاعات صاحب");
     ui->dialogTitle->setText("ویرایش اطلاعات صاحب");
     applyStyle();

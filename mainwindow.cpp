@@ -5,6 +5,11 @@
 #include "vaccinationswidget.h"
 #include "reminderswidget.h"
 #include "animalswidget.h"
+#include "userstab.h"
+#include "animaltypestab.h"
+#include "backuptab.h"
+#include "abouttab.h"
+#include "session.h"
 
 #include <QPainter>
 #include <QIcon>
@@ -12,6 +17,7 @@
 #include <QSvgRenderer>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
+#include <QVBoxLayout>
 
 class TexturedWidget : public QWidget {
 public:
@@ -61,13 +67,13 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    showMaximized();
 
     auto* textured = new TexturedWidget(this);
     textured->setLayout(ui->centralWidget->layout());
     ui->centralWidget->setLayout(nullptr);
     setCentralWidget(textured);
 
+    // ── SVG icon helper ──────────────────────────────────────────────────────
     auto setIcon = [](QPushButton* btn, const QString& path) {
         QSvgRenderer renderer(path);
         QPixmap pixmap(20, 20);
@@ -112,6 +118,51 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         ui->sidebarLogoLabel->setPixmap(tinted);
     }
 
+    // ── Settings sub-buttons — injected into sidebar after btnSettings ───────
+    // Find the navLayout inside sidebarWidget and insert a sub-widget after btnSettings
+    m_settingsSubWidget = new QWidget(ui->sidebarWidget);
+    m_settingsSubWidget->setObjectName("settingsSubWidget");
+    m_settingsSubWidget->setMaximumHeight(0); // collapsed by default
+    m_settingsSubWidget->setVisible(true);
+
+    auto* subLay = new QVBoxLayout(m_settingsSubWidget);
+    subLay->setContentsMargins(20, 2, 10, 4); // indent to show hierarchy
+    subLay->setSpacing(2);
+
+    auto makeSubBtn = [&](const QString& text) -> QPushButton* {
+        auto* btn = new QPushButton(text, m_settingsSubWidget);
+        btn->setObjectName("settingsSubBtn");
+        btn->setCheckable(true);
+        btn->setMinimumHeight(36);
+        subLay->addWidget(btn);
+        return btn;
+    };
+
+    m_btnSubAnimalTypes = makeSubBtn("حیوانات و واکسن‌ها");
+    m_btnSubUsers       = makeSubBtn("مدیریت کاربران");
+
+    // Backup sub-button — admin only
+    if (Session::instance().isAdmin()) {
+        m_btnSubBackup = makeSubBtn("بکاپ");
+    }
+
+    m_btnSubAbout = makeSubBtn("درباره");
+
+    // Insert sub-widget into the sidebar's navLayout after btnSettings
+    // navLayout is inside sidebarWidget — we find it and insert
+    auto* navLayout = qobject_cast<QVBoxLayout*>(
+        ui->sidebarWidget->findChild<QVBoxLayout*>("navLayout"));
+    if (navLayout) {
+        // Find btnSettings index and insert sub-widget right after it
+        for (int i = 0; i < navLayout->count(); ++i) {
+            if (navLayout->itemAt(i)->widget() == ui->btnSettings) {
+                navLayout->insertWidget(i + 1, m_settingsSubWidget);
+                break;
+            }
+        }
+    }
+
+    // ── Stylesheet ───────────────────────────────────────────────────────────
     this->setStyleSheet(R"(
         QWidget { background-color: transparent; }
         QWidget#toggleStrip { background-color: #1B5E20; }
@@ -145,6 +196,21 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         QWidget#sidebarWidget #btnLogout:hover {
             background-color: rgba(255,100,100,0.12); color: rgba(255,120,120,1);
         }
+        /* Settings sub-buttons — slightly smaller and indented */
+        QPushButton#settingsSubBtn {
+            background-color: transparent;
+            color: rgba(255,255,255,0.65);
+            border: none; border-radius: 6px;
+            font-size: 12px; padding: 6px 10px;
+            text-align: left;
+        }
+        QPushButton#settingsSubBtn:hover {
+            background-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9);
+        }
+        QPushButton#settingsSubBtn:checked {
+            background-color: rgba(255,255,255,0.15);
+            color: white; font-weight: bold;
+        }
         QStackedWidget { background-color: transparent; }
         QWidget#animalCard, QWidget#ownerCard, QWidget#tableCard {
             background-color: white; border: 1px solid #C8E6C9; border-radius: 10px;
@@ -165,6 +231,7 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         QScrollArea QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
+    // ── Checkable nav buttons ────────────────────────────────────────────────
     ui->btnDashboard->setCheckable(true);
     ui->btnAnimals->setCheckable(true);
     ui->btnOwners->setCheckable(true);
@@ -173,44 +240,89 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
     ui->btnSettings->setCheckable(true);
     ui->btnDashboard->setChecked(true);
 
+    // ── Connections ──────────────────────────────────────────────────────────
     connect(ui->btnDashboard,     &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
     connect(ui->btnAnimals,       &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
     connect(ui->btnOwners,        &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
     connect(ui->btnReminders,     &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
     connect(ui->btnVaccinations,  &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
-    connect(ui->btnSettings,      &QPushButton::clicked, this, &MainWindow::onNavButtonClicked);
+    connect(ui->btnSettings,      &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
     connect(ui->btnLogout,        &QPushButton::clicked, this, &MainWindow::onLogoutClicked);
     connect(ui->btnToggleSidebar, &QPushButton::clicked, this, &MainWindow::onToggleSidebar);
 
+    // Settings sub-button connections
+    connect(m_btnSubUsers, &QPushButton::clicked, this, [this]() {
+        uncheckAllButtons();
+        uncheckAllSubButtons();
+        ui->btnSettings->setChecked(true);
+        m_btnSubUsers->setChecked(true);
+        ui->contentStack->setCurrentIndex(kIdxUsers);
+    });
+    connect(m_btnSubAnimalTypes, &QPushButton::clicked, this, [this]() {
+        uncheckAllButtons();
+        uncheckAllSubButtons();
+        ui->btnSettings->setChecked(true);
+        m_btnSubAnimalTypes->setChecked(true);
+        ui->contentStack->setCurrentIndex(kIdxAnimalTypes);
+    });
+    if (m_btnSubBackup) {
+        connect(m_btnSubBackup, &QPushButton::clicked, this, [this]() {
+            uncheckAllButtons();
+            uncheckAllSubButtons();
+            ui->btnSettings->setChecked(true);
+            m_btnSubBackup->setChecked(true);
+            ui->contentStack->setCurrentIndex(kIdxBackup);
+        });
+    }
+    connect(m_btnSubAbout, &QPushButton::clicked, this, [this]() {
+        uncheckAllButtons();
+        uncheckAllSubButtons();
+        ui->btnSettings->setChecked(true);
+        m_btnSubAbout->setChecked(true);
+        ui->contentStack->setCurrentIndex(kIdxAbout);
+    });
+
+    // ── Sidebar animation ────────────────────────────────────────────────────
     m_sidebarAnim = new QPropertyAnimation(ui->sidebarWidget, "maximumWidth", this);
     m_sidebarAnim->setDuration(kAnimDuration);
     m_sidebarAnim->setEasingCurve(QEasingCurve::InOutCubic);
 
     updateToggleIcon();
 
-    // Clear pages added via .ui file
+    // ── Content stack — clear .ui placeholders and add real widgets ──────────
     while (ui->contentStack->count() > 0)
         ui->contentStack->removeWidget(ui->contentStack->widget(0));
 
     m_dashboard = new DashboardWidget(this);
-    ui->contentStack->addWidget(m_dashboard);        // index 0 - Dashboard
+    ui->contentStack->addWidget(m_dashboard);         // index 0
 
     m_animals = new AnimalsWidget(this);
-    ui->contentStack->addWidget(m_animals);     // index 1 - Animals placeholder
+    ui->contentStack->addWidget(m_animals);           // index 1
 
     m_owners = new OwnersWidget(this);
-    ui->contentStack->addWidget(m_owners);            // index 2 - Owners
+    ui->contentStack->addWidget(m_owners);            // index 2
 
     m_reminders = new RemindersWidget(this);
-    ui->contentStack->addWidget(m_reminders);         // index 3 - Reminders
+    ui->contentStack->addWidget(m_reminders);         // index 3
 
     m_vaccinations = new VaccinationsWidget(this);
-    ui->contentStack->addWidget(m_vaccinations);      // index 4 - Vaccinations
+    ui->contentStack->addWidget(m_vaccinations);      // index 4
 
-    ui->contentStack->addWidget(new QWidget(this));  // index 5 - Settings placeholder
+    m_usersTab = new UsersTab(this);
+    ui->contentStack->addWidget(m_usersTab);          // index 5
+
+    m_animalTypes = new AnimalTypesTab(this);
+    ui->contentStack->addWidget(m_animalTypes);       // index 6
+
+    m_backup = new BackupTab(this);
+    ui->contentStack->addWidget(m_backup);            // index 7
+
+    m_about = new AboutTab(this);
+    ui->contentStack->addWidget(m_about);             // index 8
 
     ui->contentStack->setCurrentIndex(0);
 
+    // ── Cross-widget navigation ──────────────────────────────────────────────
     connect(m_animals, &AnimalsWidget::navigateToOwner, this, [this](int ownerId) {
         ui->btnOwners->click();
         m_owners->showOwnerById(ownerId);
@@ -219,12 +331,94 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         ui->btnAnimals->click();
         m_animals->showAnimalById(animalId);
     });
+
+    showMaximized();
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
+
+// ── Settings expand/collapse ──────────────────────────────────────────────────
+
+void MainWindow::onSettingsClicked()
+{
+    uncheckAllButtons();
+    ui->btnSettings->setChecked(true);
+
+    bool expand = !m_settingsExpanded;
+    setSettingsExpanded(expand);
+
+    // If collapsing, go to first sub-page by default
+    if (expand) {
+        uncheckAllSubButtons();
+        m_btnSubUsers->setChecked(true);
+        ui->contentStack->setCurrentIndex(kIdxUsers);
+    }
+}
+
+void MainWindow::setSettingsExpanded(bool expanded)
+{
+    m_settingsExpanded = expanded;
+
+    // Animate sub-widget height
+    auto* anim = new QPropertyAnimation(m_settingsSubWidget, "maximumHeight", this);
+    anim->setDuration(180);
+    anim->setEasingCurve(QEasingCurve::InOutCubic);
+    anim->setStartValue(m_settingsSubWidget->maximumHeight());
+
+    // Calculate target height based on number of sub-buttons
+    int btnCount = m_settingsSubWidget->layout()->count();
+    int targetH  = expanded ? (btnCount * 40 + 8) : 0;
+
+    anim->setEndValue(targetH);
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+// ── uncheck helpers ───────────────────────────────────────────────────────────
+
+void MainWindow::uncheckAllButtons()
+{
+    ui->btnDashboard->setChecked(false);
+    ui->btnAnimals->setChecked(false);
+    ui->btnOwners->setChecked(false);
+    ui->btnReminders->setChecked(false);
+    ui->btnVaccinations->setChecked(false);
+    ui->btnSettings->setChecked(false);
+}
+
+void MainWindow::uncheckAllSubButtons()
+{
+    m_btnSubUsers->setChecked(false);
+    m_btnSubAnimalTypes->setChecked(false);
+    if (m_btnSubBackup) m_btnSubBackup->setChecked(false);
+    m_btnSubAbout->setChecked(false);
+}
+
+// ── Nav button clicked ────────────────────────────────────────────────────────
+
+void MainWindow::onNavButtonClicked()
+{
+    uncheckAllButtons();
+    uncheckAllSubButtons();
+
+    // Collapse settings sub-menu if navigating away
+    if (m_settingsExpanded) {
+        setSettingsExpanded(false);
+    }
+
+    QPushButton* btn = qobject_cast<QPushButton*>(sender());
+    if (btn) btn->setChecked(true);
+
+    if      (sender() == ui->btnDashboard)    ui->contentStack->setCurrentIndex(kIdxDashboard);
+    else if (sender() == ui->btnAnimals)      ui->contentStack->setCurrentIndex(kIdxAnimals);
+    else if (sender() == ui->btnOwners)       ui->contentStack->setCurrentIndex(kIdxOwners);
+    else if (sender() == ui->btnReminders)    ui->contentStack->setCurrentIndex(kIdxReminders);
+    else if (sender() == ui->btnVaccinations) ui->contentStack->setCurrentIndex(kIdxVaccinations);
+}
+
+// ── Toggle sidebar ────────────────────────────────────────────────────────────
 
 void MainWindow::onToggleSidebar()
 {
@@ -265,30 +459,6 @@ void MainWindow::updateToggleIcon()
 
     ui->btnToggleSidebar->setIcon(QIcon(pixmap));
     ui->btnToggleSidebar->setIconSize(QSize(16, 16));
-}
-
-void MainWindow::uncheckAllButtons()
-{
-    ui->btnDashboard->setChecked(false);
-    ui->btnAnimals->setChecked(false);
-    ui->btnOwners->setChecked(false);
-    ui->btnReminders->setChecked(false);
-    ui->btnVaccinations->setChecked(false);
-    ui->btnSettings->setChecked(false);
-}
-
-void MainWindow::onNavButtonClicked()
-{
-    uncheckAllButtons();
-    QPushButton* btn = qobject_cast<QPushButton*>(sender());
-    if (btn) btn->setChecked(true);
-
-    if      (sender() == ui->btnDashboard)    ui->contentStack->setCurrentIndex(0);
-    else if (sender() == ui->btnAnimals)      ui->contentStack->setCurrentIndex(1);
-    else if (sender() == ui->btnOwners)       ui->contentStack->setCurrentIndex(2);
-    else if (sender() == ui->btnReminders)    ui->contentStack->setCurrentIndex(3);
-    else if (sender() == ui->btnVaccinations) ui->contentStack->setCurrentIndex(4);
-    else if (sender() == ui->btnSettings)     ui->contentStack->setCurrentIndex(5);
 }
 
 void MainWindow::onLogoutClicked()

@@ -5,11 +5,11 @@
 #include <QMap>
 #include <QSqlQuery>
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  AnimalTypeInfo
-//  اطلاعات نوع حیوان رو از دیتابیس یه بار می‌خونه و cache می‌کنه
-//  استفاده: auto info = AnimalTypeInfo::get(animalTypeId);
-// ─────────────────────────────────────────────────────────────────────────────
+//-------------------------------------------------------------------------
+// AnimalTypeInfo
+// Reads the animal type information from the database once and caches it
+// Usage: auto info = AnimalTypeInfo::get(animalTypeId);
+//-------------------------------------------------------------------------
 
 struct AnimalTypeInfo {
     int     id      = -1;
@@ -19,13 +19,13 @@ struct AnimalTypeInfo {
     QString badgeFg;    // "#1B5E20"
     bool    valid   = false;
 
-    // دریافت اطلاعات بر اساس animal_type_id
+    // Get information based on animal_type_id
     static AnimalTypeInfo get(int typeId)
     {
         return loadCache().value(typeId, AnimalTypeInfo{});
     }
 
-    // پاک کردن cache — بعد از تغییر در دیتابیس صدا بزن
+    // Clear cache — Call after database changes
     static void clearCache()
     {
         loadCache(true);

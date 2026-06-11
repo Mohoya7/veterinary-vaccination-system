@@ -9,9 +9,9 @@
 #include <QMouseEvent>
 
 const QStringList PersianDatePicker::kMonths = {
-    "Farvardin","Ordibehesht","Khordad","Tir",
-    "Mordad","Shahrivar","Mehr","Aban",
-    "Azar","Dey","Bahman","Esfand"
+    "فروردین", "اردیبهشت", "خرداد", "تیر",
+    "مرداد", "شهریور", "مهر", "آبان",
+    "آذر", "دی", "بهمن", "اسفند"
 };
 const int PersianDatePicker::kMinY;
 const int PersianDatePicker::kMaxY;
@@ -64,7 +64,7 @@ PersianDatePicker::PersianDatePicker(QWidget* parent)
     m_field->setReadOnly(true);
     m_field->setLayoutDirection(Qt::RightToLeft);
     m_field->setCursor(Qt::PointingHandCursor);
-    m_field->setPlaceholderText("Select date...");
+    m_field->setPlaceholderText("انتخاب تاریخ");
     m_field->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_field->setStyleSheet(R"(
         QLineEdit {
@@ -99,7 +99,7 @@ void PersianDatePicker::openDialog()
 {
     // ── Build Dialog ──────────────────────────────────────────────────────────
     QDialog dlg(this->window());
-    dlg.setWindowTitle("Select Date");
+    dlg.setWindowTitle("انتخاب تاریخ");
     dlg.setLayoutDirection(Qt::RightToLeft);
     dlg.setFixedWidth(340);
     dlg.setStyleSheet(R"(
@@ -124,7 +124,7 @@ void PersianDatePicker::openDialog()
     auto* hdrLay = new QHBoxLayout(hdr);
     hdrLay->setContentsMargins(16,0,16,0);
 
-    auto* ttl = new QLabel("📅 Select Persian Date");
+    auto* ttl = new QLabel("انتخاب تاریخ");
     ttl->setStyleSheet(
         "color:white;font-size:14px;font-weight:500;"
         "background:transparent;border:none;");
@@ -155,7 +155,7 @@ void PersianDatePicker::openDialog()
         auto* l = new QLabel(lbl);
         l->setStyleSheet(
             "font-size:11px;color:#757575;background:transparent;border:none;");
-        l->setAlignment(Qt::AlignRight);
+        l->setAlignment(Qt::AlignLeft);
         auto* cb = new QComboBox;
         cb->setStyleSheet(kComboStyle);
         cb->setLayoutDirection(Qt::RightToLeft);
@@ -167,9 +167,9 @@ void PersianDatePicker::openDialog()
     };
 
     // RTL: Year | Month | Day
-    QComboBox* cbYear  = makeCol("Year", 2);
-    QComboBox* cbMonth = makeCol("Month", 2);
-    QComboBox* cbDay   = makeCol("Day", 1);
+    QComboBox* cbYear  = makeCol("سال", 2);
+    QComboBox* cbMonth = makeCol("ماه", 2);
+    QComboBox* cbDay   = makeCol("روز", 1);
 
     bodyLay->addWidget(row);
 
@@ -224,7 +224,7 @@ void PersianDatePicker::openDialog()
     footerLay->setContentsMargins(16,0,16,0);
     footerLay->setSpacing(8);
 
-    auto* btnOk = new QPushButton("OK");
+    auto* btnOk = new QPushButton("تایید");
     btnOk->setFixedHeight(36);
     btnOk->setMinimumWidth(90);
     btnOk->setCursor(Qt::PointingHandCursor);
@@ -236,7 +236,7 @@ void PersianDatePicker::openDialog()
         QPushButton:hover { background:#1B5E20; }
     )");
 
-    auto* btnNo = new QPushButton("Cancel");
+    auto* btnNo = new QPushButton("لغو");
     btnNo->setFixedHeight(36);
     btnNo->setMinimumWidth(90);
     btnNo->setCursor(Qt::PointingHandCursor);
@@ -248,9 +248,9 @@ void PersianDatePicker::openDialog()
         QPushButton:hover { background:#F5F5F5; }
     )");
 
-    footerLay->addStretch();
-    footerLay->addWidget(btnNo);
     footerLay->addWidget(btnOk);
+    footerLay->addWidget(btnNo);
+    footerLay->addStretch();
     vlay->addWidget(footer);
 
     // ── Button Signals ───────────────────────────────────────────────────────

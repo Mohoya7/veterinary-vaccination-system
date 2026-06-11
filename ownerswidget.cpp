@@ -5,6 +5,7 @@
 #include "addanimaldialog.h"
 #include "addvaccinedialog.h"
 #include "styledmessagebox.h"
+#include "session.h"
 
 #include <QSqlQuery>
 #include <QMessageBox>
@@ -28,7 +29,6 @@ public:
         lay->setContentsMargins(14, 8, 14, 8);
         lay->setSpacing(10);
 
-        // Initials avatar
         QString initials;
         QStringList parts = fullName.split(' ', Qt::SkipEmptyParts);
         if (!parts.isEmpty()) initials += parts.first().left(1);
@@ -49,13 +49,11 @@ public:
         phoneL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         phoneL->setStyleSheet("font-size:11px;color:#757575;background:transparent;");
 
-        // Order: avatar (right) | name (middle) | phone (left)
         lay->addWidget(avatar);
         lay->addWidget(nameL);
         lay->addStretch();
         lay->addWidget(phoneL);
     }
-
 };
 
 OwnersWidget::OwnersWidget(QWidget *parent)
@@ -167,6 +165,11 @@ OwnersWidget::OwnersWidget(QWidget *parent)
 
     ui->profileWidget->hide();
 
+    // Hide delete button for non-admin users
+    if (!Session::instance().isAdmin()) {
+        ui->btnDelete->hide();
+    }
+
     // Green scrollbar for owner list
     ui->ownerListWidget->verticalScrollBar()->setStyleSheet(R"(
         QScrollBar:vertical {
@@ -223,7 +226,6 @@ void OwnersWidget::loadOwners(const QString& filter)
     m_currentOffset = 0;
     ui->ownerListWidget->clear();
 
-    // حذف دکمه قدیمی از layout
     if (m_loadMoreBtn) {
         auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
         if (lay) lay->removeWidget(m_loadMoreBtn);
@@ -236,7 +238,6 @@ void OwnersWidget::loadOwners(const QString& filter)
 
 void OwnersWidget::appendOwners(const QString& filter, int offset)
 {
-
     QString sql =
         "SELECT id, first_name, last_name, phone FROM owners "
         "WHERE TRUE ";
@@ -260,7 +261,7 @@ void OwnersWidget::appendOwners(const QString& filter, int offset)
     int fetched = 0;
     while (q.next()) {
         fetched++;
-        if (fetched > m_pageSize) break; // رکورد اضافه رو نمایش نمی‌دیم
+        if (fetched > m_pageSize) break;
 
         int id        = q.value("id").toInt();
         QString name  = q.value("first_name").toString()
@@ -343,7 +344,6 @@ void OwnersWidget::showOwnerProfile(int ownerId)
 
     QString fullName = q.value("first_name").toString() + " " + q.value("last_name").toString();
 
-    // Avatar initials
     QString initials;
     QStringList parts = fullName.split(' ', Qt::SkipEmptyParts);
     if (!parts.isEmpty()) initials += parts.first().left(1);
@@ -355,7 +355,6 @@ void OwnersWidget::showOwnerProfile(int ownerId)
         "border-radius:25px;font-size:16px;font-weight:500;");
     ui->ownerNameLabel->setText(fullName);
 
-    // Animal count
     QSqlQuery countQ;
     countQ.prepare("SELECT COUNT(*) FROM animals WHERE owner_id = :id");
     countQ.bindValue(":id", ownerId);
@@ -363,7 +362,6 @@ void OwnersWidget::showOwnerProfile(int ownerId)
     int animalCount = countQ.next() ? countQ.value(0).toInt() : 0;
     ui->ownerSubLabel->setText(QString::number(animalCount) + " حیوان ثبت شده");
 
-    // Contact rows
     clearContactRows();
     addContactRow("شماره اول", q.value("phone").toString());
     if (!q.value("phone_secondary").toString().isEmpty())
@@ -404,7 +402,6 @@ void OwnersWidget::addContactRow(const QString& label, const QString& value)
     rowLay->setContentsMargins(0, 7, 0, 7);
     rowLay->setSpacing(8);
 
-    // Label on right, value on left (RTL layout)
     auto* labelL = new QLabel(label);
     labelL->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     labelL->setStyleSheet("font-size:12px;color:#757575;background:transparent;");
@@ -450,14 +447,13 @@ void OwnersWidget::loadAnimals(int ownerId)
     while (q.next()) {
         int     animalId = q.value("id").toInt();
         QString name     = q.value("name").toString();
-        bool    isDog    = (q.value("type").toString() == "dog");
-        QString typeStr  = isDog ? "سگ" : "گربه";
+        auto    ti       = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
 
         auto* chip = new QPushButton;
         chip->setLayoutDirection(Qt::LeftToRight);
         chip->setFixedHeight(38);
         chip->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        chip->setText(name + "  |  " + typeStr);
+        chip->setText(name + "  |  " + ti.name);
         chip->setStyleSheet(
             "QPushButton {"
             "  background: #F1F8E9;"
@@ -506,10 +502,10 @@ void OwnersWidget::onAddOwnerClicked()
         }
     }
 
-    auto reply = QMessageBox::question(this, "افزودن حیوان",
-                                       "آیا می‌خواهید برای این صاحب حیوان اضافه کنید؟",
-                                       QMessageBox::Yes | QMessageBox::No);
-    if (reply != QMessageBox::Yes) return;
+    bool addAnimal = StyledMessageBox::question(
+        this, "افزودن حیوان",
+        "آیا می‌خواهید برای این صاحب حیوان اضافه کنید؟");
+    if (!addAnimal) return;
 
     AddAnimalDialog animalDlg(newOwnerId, ownerPhone, this);
     if (animalDlg.exec() != QDialog::Accepted) {
@@ -520,10 +516,10 @@ void OwnersWidget::onAddOwnerClicked()
     int newAnimalId = animalDlg.savedAnimalId();
     showOwnerProfile(newOwnerId);
 
-    auto reply2 = QMessageBox::question(this, "افزودن واکسن",
-                                        "آیا می‌خواهید برای این حیوان واکسن اضافه کنید؟",
-                                        QMessageBox::Yes | QMessageBox::No);
-    if (reply2 != QMessageBox::Yes) return;
+    bool addVaccine = StyledMessageBox::question(
+        this, "افزودن واکسن",
+        "آیا می‌خواهید برای این حیوان واکسن اضافه کنید؟");
+    if (!addVaccine) return;
 
     AddVaccineDialog vaccineDlg(newAnimalId, this);
     vaccineDlg.exec();
@@ -552,21 +548,13 @@ void OwnersWidget::onDeleteOwnerClicked()
     if (animalCount > 0)
         msg += QString("\n\nاین صاحب دارای %1 حیوان ثبت شده است که همراه با واکسن‌هایشان حذف خواهند شد.").arg(animalCount);
 
-    if (QMessageBox::warning(this, "حذف صاحب", msg,
-                             QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+    if (!StyledMessageBox::question(this, "حذف صاحب", msg)) return;
 
     QSqlQuery q;
-    q.prepare("UPDATE reminder_followups rf "
-              "JOIN vaccinations v ON rf.vaccination_id = v.id "
-              "JOIN animals a ON v.animal_id = a.id "
-              "SET rf.is_resolved = TRUE WHERE a.owner_id = :id");
-    q.bindValue(":id", m_selectedOwnerId); q.exec();
-
-    q.prepare("UPDATE vaccinations v JOIN animals a ON v.animal_id = a.id ");
-    // CASCADE: حذف صاحب → animals → vaccinations → reminder_followups خودکار حذف میشن
+    // CASCADE: delete owner → animals → vaccinations → reminder_followups auto-deleted
     q.prepare("DELETE FROM owners WHERE id = :id");
     q.bindValue(":id", m_selectedOwnerId); q.exec();
 
     clearProfile();
-              loadOwners();
+    loadOwners();
 }

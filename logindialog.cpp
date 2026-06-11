@@ -136,13 +136,16 @@ void LoginDialog::onLoginClicked()
     QString hashedPassword = Database::hashPassword(password);
 
     QSqlQuery query;
-    query.prepare("SELECT role FROM users WHERE username = :username AND password_hash = :password");
+    query.prepare("SELECT id, role FROM users "
+                  "WHERE username = :username AND password_hash = :password");
     query.bindValue(":username", username);
     query.bindValue(":password", hashedPassword);
     query.exec();
 
     if (query.next()) {
-        m_role = query.value("role").toString();
+        m_userId   = query.value("id").toInt();
+        m_username = username;
+        m_role     = query.value("role").toString();
         accept();
     } else {
         QMessageBox::warning(this, "خطا", "نام کاربری یا رمز عبور اشتباه است.");
