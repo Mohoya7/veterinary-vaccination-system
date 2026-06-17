@@ -331,10 +331,6 @@ int PersianDatePicker::daysInMonth(int jy, int jm) const
 
 QString PersianDatePicker::farsi(int n, int w) const
 {
-    QString s = w > 0 ? QString("%1").arg(n, w, 10, QChar('0'))
-                      : QString::number(n);
-    QString o; o.reserve(s.size());
-    for (QChar c : s)
-        o += (c>='0'&&c<='9') ? QChar(0x06F0+(c.unicode()-'0')) : c;
-    return o;
+    return w > 0 ? QString("%1").arg(n, w, 10, QChar('0'))
+                 : QString::number(n);
 }

@@ -265,5 +265,23 @@ void AddVaccineDialog::onSaveClicked()
         return;
     }
 
+    // In add mode: resolve any open reminders for the same animal + vaccine type
+    if (m_vaccinationId < 0) {
+        int newVacId = q.lastInsertId().toInt();
+        QSqlQuery resolveQ;
+        resolveQ.prepare(
+            "UPDATE reminder_followups rf "
+            "JOIN vaccinations v ON rf.vaccination_id = v.id "
+            "SET rf.is_resolved = TRUE, rf.followed_up_at = NOW() "
+            "WHERE v.animal_id = :animal_id "
+            "  AND v.vaccine_type_id = :vtype_id "
+            "  AND v.id != :new_id "
+            "  AND rf.is_resolved = FALSE");
+        resolveQ.bindValue(":animal_id", m_animalId);
+        resolveQ.bindValue(":vtype_id",  vaccineTypeId);
+        resolveQ.bindValue(":new_id",    newVacId);
+        resolveQ.exec();
+    }
+
     accept();
 }

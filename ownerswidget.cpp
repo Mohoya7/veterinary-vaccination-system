@@ -239,13 +239,19 @@ void OwnersWidget::loadOwners(const QString& filter)
 void OwnersWidget::appendOwners(const QString& filter, int offset)
 {
     QString sql =
-        "SELECT id, first_name, last_name, phone FROM owners "
+        "SELECT DISTINCT o.id, o.first_name, o.last_name, o.phone "
+        "FROM owners o "
+        "LEFT JOIN animals a ON a.owner_id = o.id "
         "WHERE TRUE ";
 
     if (!filter.isEmpty())
-        sql += "AND (CONCAT(first_name,' ',last_name) LIKE :f OR phone LIKE :f2) ";
+        sql += "AND (CONCAT(o.first_name,' ',o.last_name) LIKE :f "
+               "OR o.phone LIKE :f2 "
+               "OR o.phone_secondary LIKE :f3 "
+               "OR a.file_number LIKE :f4 "
+               "OR a.name LIKE :f5) ";
 
-    sql += QString("ORDER BY first_name LIMIT %1 OFFSET %2")
+    sql += QString("ORDER BY o.first_name LIMIT %1 OFFSET %2")
                .arg(m_pageSize + 1)
                .arg(offset);
 
@@ -255,6 +261,9 @@ void OwnersWidget::appendOwners(const QString& filter, int offset)
         QString like = "%" + filter + "%";
         q.bindValue(":f",  like);
         q.bindValue(":f2", like);
+        q.bindValue(":f3", like);
+        q.bindValue(":f4", like);
+        q.bindValue(":f5", like);
     }
     q.exec();
 
@@ -336,7 +345,7 @@ void OwnersWidget::showOwnerProfile(int ownerId)
     m_selectedOwnerId = ownerId;
 
     QSqlQuery q;
-    q.prepare("SELECT first_name, last_name, phone, phone_secondary, address, notes "
+    q.prepare("SELECT first_name, last_name, phone, phone_secondary, address, notes, gender "
               "FROM owners WHERE id = :id");
     q.bindValue(":id", ownerId);
     q.exec();
@@ -370,6 +379,7 @@ void OwnersWidget::showOwnerProfile(int ownerId)
         addContactRow("آدرس", q.value("address").toString());
     if (!q.value("notes").toString().isEmpty())
         addContactRow("یادداشت", q.value("notes").toString());
+    addContactRow("جنسیت", q.value("gender").toString());
 
     loadAnimals(ownerId);
 
@@ -403,12 +413,13 @@ void OwnersWidget::addContactRow(const QString& label, const QString& value)
     rowLay->setSpacing(8);
 
     auto* labelL = new QLabel(label);
-    labelL->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    labelL->setStyleSheet("font-size:12px;color:#757575;background:transparent;");
+    labelL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    labelL->setStyleSheet("font-size:12px;font-weight:500;color:#757575;background:transparent;");
 
     auto* valueL = new QLabel(value);
-    valueL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    valueL->setStyleSheet("font-size:12px;font-weight:500;color:#212121;background:transparent;");
+    valueL->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    valueL->setWordWrap(true);
+    valueL->setStyleSheet("font-size:12px;color:#212121;background:transparent;");
 
     rowLay->addWidget(labelL);
     rowLay->addStretch();
@@ -502,8 +513,10 @@ void OwnersWidget::onAddOwnerClicked()
         }
     }
 
+    showOwnerProfile(newOwnerId);
+
     bool addAnimal = StyledMessageBox::question(
-        this, "افزودن حیوان",
+        this, "افزودن صاحب با موفقیت انجام شد.",
         "آیا می‌خواهید برای این صاحب حیوان اضافه کنید؟");
     if (!addAnimal) return;
 
@@ -517,14 +530,14 @@ void OwnersWidget::onAddOwnerClicked()
     showOwnerProfile(newOwnerId);
 
     bool addVaccine = StyledMessageBox::question(
-        this, "افزودن واکسن",
+        this, "افزودن حیوان با موفقیت انجام شد.",
         "آیا می‌خواهید برای این حیوان واکسن اضافه کنید؟");
     if (!addVaccine) return;
 
     AddVaccineDialog vaccineDlg(newAnimalId, this);
-    vaccineDlg.exec();
+    if (vaccineDlg.exec() == QDialog::Accepted)
+        showOwnerProfile(newOwnerId);
 }
-
 void OwnersWidget::onEditOwnerClicked()
 {
     if (m_selectedOwnerId < 0) return;

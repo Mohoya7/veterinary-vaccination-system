@@ -142,21 +142,6 @@ inline QString monthName(int jm)
     return names[jm];
 }
 
-// ── Convert Latin numerals to Persian ──────────────────────────────────────────────
-
-inline QString toFarsiDigits(const QString& s)
-{
-    QString out;
-    out.reserve(s.size());
-    for (QChar c : s) {
-        if (c >= '0' && c <= '9')
-            out += QChar(0x06F0 + (c.unicode() - '0'));
-        else
-            out += c;
-    }
-    return out;
-}
-
 // Display: Gregorian QDate → Solar string
 
 // Short format: 1404/03/07
@@ -165,12 +150,10 @@ inline QString toDisplayShort(const QDate& date)
     if (!date.isValid()) return "—";
     int jy, jm, jd;
     if (!toJalali(date, jy, jm, jd)) return "—";
-    return toFarsiDigits(
-        QString("%1/%2/%3")
-            .arg(jy)
-            .arg(jm, 2, 10, QChar('0'))
-            .arg(jd, 2, 10, QChar('0'))
-        );
+    return QString("%1/%2/%3")
+        .arg(jy)
+        .arg(jm, 2, 10, QChar('0'))
+        .arg(jd, 2, 10, QChar('0'));
 }
 
 // Long format: 7 June 1404
@@ -179,9 +162,9 @@ inline QString toDisplayLong(const QDate& date)
     if (!date.isValid()) return "—";
     int jy, jm, jd;
     if (!toJalali(date, jy, jm, jd)) return "—";
-    return toFarsiDigits(QString::number(jd)) + " " +
+    return QString::number(jd) + " " +
            monthName(jm) + " " +
-           toFarsiDigits(QString::number(jy));
+           QString::number(jy);
 }
 
 // ── Search: Solar Date → Gregorian QDate

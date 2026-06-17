@@ -95,7 +95,7 @@
                 <property name="rightMargin"><number>16</number></property>
                 <property name="topMargin"><number>14</number></property>
                 <property name="bottomMargin"><number>14</number></property>
-                <item><widget class="QLabel" name="contactCardTitle"><property name="text"><string>اطلاعات تماس</string></property></widget></item>
+                <item><widget class="QLabel" name="contactCardTitle"><property name="text"><string>اطلاعات صاحب</string></property></widget></item>
                 <item>
                  <widget class="QWidget" name="contactRowsContainer">
                   <layout class="QVBoxLayout" name="contactRowsLayout">
@@ -167,7 +167,7 @@
          <property name="bottomMargin"><number>14</number></property>
          <property name="spacing"><number>10</number></property>
          <item><widget class="QLabel" name="listTitle"><property name="text"><string>صاحبان</string></property></widget></item>
-         <item><widget class="QLineEdit" name="searchEdit"><property name="placeholderText"><string>جستجو نام یا شماره...</string></property></widget></item>
+         <item><widget class="QLineEdit" name="searchEdit"><property name="placeholderText"><string>جستوجوی نام، شماره تماس یا شماره پرونده</string></property></widget></item>
         </layout>
        </widget>
       </item>

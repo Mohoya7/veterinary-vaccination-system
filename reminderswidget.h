@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QDate>
+#include <QEvent>
 #include "persiandatepicker.h"
 
 class QSqlQuery;
@@ -23,6 +24,10 @@ public:
     explicit RemindersWidget(QWidget *parent = nullptr);
     ~RemindersWidget();
     void loadData();
+
+signals:
+    void navigateToAnimal(int animalId); // emitted when animal name is clicked
+    void navigateToOwner(int ownerId);   // emitted when owner name is clicked
 
 private slots:
     void onFiltersChanged();
@@ -43,24 +48,23 @@ private:
     void    bindWhereParams(QSqlQuery& q) const;
 
     QWidget* makeBadge(const QString& text, const QString& bg, const QString& fg);
+    void showToast(const QString& message);
     QWidget* makeResponseCombo(int rfId, int currentResponse);
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* ev) override;
 
     Ui::RemindersWidget *ui;
 
-    // ── Date filter ──────────────────────────────────────────────────────────
     QWidget*           m_filterDateWidget  = nullptr;
-    // Mode selection combo (based on day/date range)
     QComboBox*         m_subModeCombo      = nullptr;
-    // Manual mode
     QSpinBox*          m_daysSpin          = nullptr;
-    QPushButton*       m_dirBtn            = nullptr;  // ← toggle future/past
-    //Interval mode
+    QPushButton*       m_dirBtn            = nullptr;
     PersianDatePicker* m_pickerFrom        = nullptr;
     PersianDatePicker* m_pickerTo          = nullptr;
 
-    bool m_subManualMode = true; // true=based on day, false=date range
+    bool m_subManualMode = true;
 
-    // pagination
     int  m_offset = 0;
     static constexpr int kPageSize = 100;
     QPushButton* m_loadMoreBtn = nullptr;

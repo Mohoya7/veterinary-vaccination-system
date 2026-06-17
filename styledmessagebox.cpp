@@ -6,7 +6,6 @@
 #include <QPushButton>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QGraphicsDropShadowEffect>
 
 StyledMessageBox::StyledMessageBox(Type type, const QString& title,
                                    const QString& message, QWidget* parent)
@@ -32,26 +31,18 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
     }
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(12, 12, 12, 12);
+    root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // Card
+    // Card — no shadow, no glass border
     auto* card = new QWidget;
     card->setObjectName("smb_card");
-    card->setStyleSheet(QString(R"(
+    card->setStyleSheet(R"(
         QWidget#smb_card {
             background: white;
             border-radius: 12px;
-            border: 0.5px solid #E8E8E8;
         }
-    )"));
-
-    // Drop shadow
-    auto* shadow = new QGraphicsDropShadowEffect(card);
-    shadow->setBlurRadius(32);
-    shadow->setOffset(0, 6);
-    shadow->setColor(QColor(0, 0, 0, 40));
-    card->setGraphicsEffect(shadow);
+    )");
 
     auto* cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(0, 0, 0, 0);
@@ -60,7 +51,11 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
     // Top accent bar
     auto* bar = new QWidget;
     bar->setFixedHeight(4);
-    bar->setStyleSheet(QString("background:%1;border-top-left-radius:12px;border-top-right-radius:12px;").arg(t.accent));
+    bar->setStyleSheet(QString(
+                           "background:%1;"
+                           "border-top-left-radius:12px;"
+                           "border-top-right-radius:12px;"
+                           ).arg(t.accent));
     cardLayout->addWidget(bar);
 
     // Body
@@ -70,9 +65,10 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
     bodyLay->setContentsMargins(24, 20, 24, 20);
     bodyLay->setSpacing(16);
 
-    // Icon + Title row
+    // Icon + Title row — icon on the left (visual right in RTL), title next to it
     auto* topRow = new QHBoxLayout;
     topRow->setSpacing(12);
+    topRow->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     auto* iconW = new QLabel(t.iconText);
     iconW->setFixedSize(40, 40);
@@ -86,50 +82,30 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
     )").arg(t.iconBg, t.iconFg));
 
     auto* titleL = new QLabel(title);
-    titleL->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    titleL->setStyleSheet("font-size:16px;font-weight:600;color:#1A1A1A;background:transparent;");
+    titleL->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    titleL->setStyleSheet(
+        "font-size:16px;font-weight:600;color:#1A1A1A;background:transparent;");
 
-    topRow->addWidget(titleL);
-    topRow->addStretch();
+    // RTL: icon appears on the right visually, title to its left
+    topRow->addWidget(titleL, 1);
     topRow->addWidget(iconW);
 
-    // Message
     auto* msgL = new QLabel(message);
     msgL->setWordWrap(true);
-    msgL->setAlignment(Qt::AlignRight | Qt::AlignTop);
-    msgL->setStyleSheet("font-size:13px;color:#555;line-height:1.6;background:transparent;");
+    msgL->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    msgL->setStyleSheet(
+        "font-size:13px;color:#555;line-height:1.6;background:transparent;");
 
     // Divider
     auto* divider = new QFrame;
     divider->setFrameShape(QFrame::HLine);
     divider->setStyleSheet("color:#F0F0F0;");
 
-    // Buttons
     auto* btnRow = new QHBoxLayout;
     btnRow->setSpacing(8);
-    btnRow->addStretch();
+    btnRow->setAlignment(Qt::AlignLeft);
 
     if (type == Question) {
-        auto* btnNo = new QPushButton("خیر");
-        btnNo->setFixedHeight(38);
-        btnNo->setMinimumWidth(88);
-        btnNo->setCursor(Qt::PointingHandCursor);
-        btnNo->setStyleSheet(R"(
-            QPushButton {
-                background: white;
-                color: #555;
-                border: 1px solid #E0E0E0;
-                border-radius: 8px;
-                font-size: 13px;
-                font-weight: 500;
-                padding: 0 20px;
-            }
-            QPushButton:hover { background: #F5F5F5; border-color: #BDBDBD; }
-            QPushButton:pressed { background: #EEEEEE; }
-        )");
-        connect(btnNo, &QPushButton::clicked, this, &QDialog::reject);
-        btnRow->addWidget(btnNo);
-
         auto* btnYes = new QPushButton("بله");
         btnYes->setFixedHeight(38);
         btnYes->setMinimumWidth(88);
@@ -151,7 +127,29 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
             m_accepted = true;
             accept();
         });
+
+        auto* btnNo = new QPushButton("خیر");
+        btnNo->setFixedHeight(38);
+        btnNo->setMinimumWidth(88);
+        btnNo->setCursor(Qt::PointingHandCursor);
+        btnNo->setStyleSheet(R"(
+            QPushButton {
+                background: white;
+                color: #555;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                padding: 0 20px;
+            }
+            QPushButton:hover { background: #F5F5F5; border-color: #BDBDBD; }
+            QPushButton:pressed { background: #EEEEEE; }
+        )");
+        connect(btnNo, &QPushButton::clicked, this, &QDialog::reject);
+
         btnRow->addWidget(btnYes);
+        btnRow->addWidget(btnNo);
+        btnRow->addStretch();
 
     } else {
         auto* btnOk = new QPushButton("باشه");
@@ -172,7 +170,9 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
             QPushButton:pressed { background: %2; }
         )").arg(t.accent, t.btnHover));
         connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
+
         btnRow->addWidget(btnOk);
+        btnRow->addStretch();
     }
 
     bodyLay->addLayout(topRow);
@@ -189,7 +189,6 @@ StyledMessageBox::StyledMessageBox(Type type, const QString& title,
 void StyledMessageBox::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
-    // transparent background — shadow handled by QGraphicsDropShadowEffect
 }
 
 bool StyledMessageBox::question(QWidget* parent, const QString& title, const QString& message)

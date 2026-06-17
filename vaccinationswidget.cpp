@@ -14,6 +14,8 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QEvent>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QListWidget>
@@ -23,6 +25,10 @@
 #include <QFrame>
 #include <QMessageBox>
 #include <QGraphicsDropShadowEffect>
+#include <QClipboard>
+#include <QApplication>
+#include <QTimer>
+#include <QContextMenuEvent>
 
 VaccinationsWidget::VaccinationsWidget(QWidget *parent)
     : QWidget(parent)
@@ -101,8 +107,8 @@ void VaccinationsWidget::showVaccinationById(int vacId)
     tbl->setRowCount(0);
 
     if (m_loadMoreBtn) {
-        auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
-        if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+        auto* outer = qobject_cast<QVBoxLayout*>(this->layout());
+        if (outer) outer->removeWidget(m_loadMoreBtn);
         m_loadMoreBtn->deleteLater();
         m_loadMoreBtn = nullptr;
     }
@@ -376,7 +382,8 @@ QString VaccinationsWidget::buildWhereClause() const
     if (!search.isEmpty())
         where += "AND (a.name LIKE :search "
                  "OR o.phone LIKE :search2 "
-                 "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
+                 "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3 "
+                 "OR a.file_number LIKE :search4) ";
 
     if      (animalTypeIdx == 1) where += "AND a.animal_type_id = 1 ";
     else if (animalTypeIdx == 2) where += "AND a.animal_type_id = 2 ";
@@ -410,6 +417,7 @@ void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
         q.bindValue(":search",  like);
         q.bindValue(":search2", like);
         q.bindValue(":search3", like);
+        q.bindValue(":search4", like);
     }
     if (vaccineTypeId > 0)
         q.bindValue(":vtid", vaccineTypeId);
@@ -422,25 +430,131 @@ void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// showToast — پیام کوچک "کپی شد" در پایین صفحه برای ~1.5 ثانیه
+// ─────────────────────────────────────────────────────────────────────────────
+
+void VaccinationsWidget::showToast(const QString& message)
+{
+    // اگر toast قبلی هنوز زنده‌ست حذفش می‌کنیم
+    if (auto* old = findChild<QLabel*>("toastLabel"))
+        old->deleteLater();
+
+    auto* toast = new QLabel(message, this);
+    toast->setObjectName("toastLabel");
+    toast->setAlignment(Qt::AlignCenter);
+    toast->setStyleSheet(R"(
+        QLabel {
+            background: rgba(33,33,33,210);
+            color: white;
+            border-radius: 8px;
+            font-size: 12px;
+            padding: 8px 20px;
+        }
+    )");
+    toast->adjustSize();
+    toast->setFixedHeight(36);
+
+    // وسط-پایین صفحه
+    int x = (width()  - toast->width())  / 2;
+    int y =  height() - toast->height() - 20;
+    toast->move(x, y);
+    toast->raise();
+    toast->show();
+
+    QTimer::singleShot(1500, toast, &QLabel::deleteLater);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// eventFilter — handles clicks on animal/owner name labels in table
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool VaccinationsWidget::eventFilter(QObject* obj, QEvent* ev)
+{
+    // ── viewport جدول: راست‌کلیک → کپی مقدار ستون ──────────────────────────
+    if (obj == ui->vaccinationsTable->viewport()
+        && ev->type() == QEvent::MouseButtonPress)
+    {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        if (me->button() == Qt::RightButton || me->button() == Qt:: LeftButton) {
+            auto* tbl = ui->vaccinationsTable;
+            int col = tbl->columnAt(me->pos().x());
+            int row = tbl->rowAt(me->pos().y());
+            if (row < 0 || col < 0)
+                return QWidget::eventFilter(obj, ev);
+
+            // ستون‌های کپی‌پذیر: 1=شماره پرونده، 5=شماره، 6=واکسن، 7=تاریخ، 8=یادآوری
+            QString copyText;
+            if (col == 1 || col == 5 || col == 6 || col == 7 || col == 8) {
+                if (auto* lbl = qobject_cast<QLabel*>(tbl->cellWidget(row, col)))
+                    copyText = lbl->text();
+                else if (auto* item = tbl->item(row, col))
+                    copyText = item->text();
+            }
+            // ستون 2=حیوان، 4=صاحب — راست‌کلیک روشون به eventFilter لیبل می‌رسه، اینجا کاری نمی‌کنیم
+
+            if (!copyText.isEmpty()) {
+                QApplication::clipboard()->setText(copyText);
+                showToast("کپی شد ✓");
+                return true;
+            }
+        }
+        return QWidget::eventFilter(obj, ev);
+    }
+
+    // ── لیبل‌های لینک‌دار (حیوان / صاحب): چپ‌کلیک → navigate ───────────────
+    auto* lbl = qobject_cast<QLabel*>(obj);
+    if (!lbl) return QWidget::eventFilter(obj, ev);
+
+    bool isAnimal = lbl->property("isAnimalLink").toBool();
+    bool isOwner  = lbl->property("isOwnerLink").toBool();
+    if (!isAnimal && !isOwner) return QWidget::eventFilter(obj, ev);
+
+    if (ev->type() == QEvent::Enter) {
+        lbl->setStyleSheet("color: #212121; text-decoration: underline; background: transparent;");
+        return false;
+    }
+    if (ev->type() == QEvent::Leave) {
+        lbl->setStyleSheet("color: #212121; background: transparent;");
+        return false;
+    }
+    if (ev->type() == QEvent::MouseButtonPress) {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        if (me->button() == Qt::LeftButton) {
+            if (isAnimal) emit navigateToAnimal(lbl->property("animalId").toInt());
+            else          emit navigateToOwner(lbl->property("ownerId").toInt());
+            return true;
+        }
+        if (me->button() == Qt::RightButton) {
+            QApplication::clipboard()->setText(lbl->property("copyValue").toString());
+            showToast("کپی شد ✓");
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
 void VaccinationsWidget::loadTable()
 {
     auto* tbl = ui->vaccinationsTable;
     tbl->setRowCount(0);
-    tbl->setColumnCount(9);
+    tbl->setColumnCount(11); // +2: row number, file_number
     tbl->setLayoutDirection(Qt::RightToLeft);
 
     QStringList headers = {
-        "حیوان","نوع","صاحب","شماره",
-        "نوع واکسن","تاریخ تزریق","یادآوری بعدی","وضعیت",""
+        "#", "شماره پرونده", "حیوان", "نوع", "صاحب", "شماره",
+        "نوع واکسن", "تاریخ تزریق", "یادآوری بعدی", "وضعیت", ""
     };
     tbl->setHorizontalHeaderLabels(headers);
 
     auto* hv = tbl->horizontalHeader();
     hv->setLayoutDirection(Qt::RightToLeft);
-    hv->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    hv->setDefaultAlignment(Qt::AlignCenter);
     hv->setSectionResizeMode(QHeaderView::Stretch);
-    hv->setSectionResizeMode(8, QHeaderView::Fixed);
-    tbl->setColumnWidth(8, 150);
+    hv->setSectionResizeMode(0,  QHeaderView::Fixed); // row number
+    hv->setSectionResizeMode(10, QHeaderView::Fixed); // action buttons
+    tbl->setColumnWidth(0,  45);
+    tbl->setColumnWidth(10, 150);
 
     tbl->verticalHeader()->setVisible(false);
     tbl->setShowGrid(false);
@@ -462,10 +576,13 @@ void VaccinationsWidget::loadTable()
     )");
 
     tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    tbl->viewport()->installEventFilter(this);
 
     if (m_loadMoreBtn) {
-        auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
-        if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+        // Remove from outerLayout (parent of tableCard) — not from tableCard itself
+        // This prevents the table from resizing when the button is added/removed
+        auto* outer = qobject_cast<QVBoxLayout*>(this->layout());
+        if (outer) outer->removeWidget(m_loadMoreBtn);
         m_loadMoreBtn->deleteLater();
         m_loadMoreBtn = nullptr;
     }
@@ -479,8 +596,10 @@ void VaccinationsWidget::appendRows(int offset)
     auto* tbl = ui->vaccinationsTable;
 
     QString sql =
-        "SELECT DISTINCT v.id, a.name AS animal_name, "
+        "SELECT DISTINCT v.id, a.id AS animal_id, a.name AS animal_name, "
+        "a.file_number, "
         "at.name AS type_name, at.badge_bg, at.badge_fg, "
+        "o.id AS owner_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
         "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
         "FROM vaccinations v "
@@ -505,7 +624,7 @@ void VaccinationsWidget::appendRows(int offset)
 
     auto makeItem = [](const QString& text) {
         auto* item = new QTableWidgetItem(text);
-        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        item->setTextAlignment(Qt::AlignCenter);
         return item;
     };
 
@@ -514,7 +633,10 @@ void VaccinationsWidget::appendRows(int offset)
         if (fetched > kPageSize) break;
 
         int     vacId       = q.value("id").toInt();
+        int     animalId    = q.value("animal_id").toInt();
+        int     ownerId     = q.value("owner_id").toInt();
         QString animalName  = q.value("animal_name").toString();
+        QString fileNumber  = q.value("file_number").toString();
         QString typeName    = q.value("type_name").toString();
         QString badgeBg     = q.value("badge_bg").toString();
         QString badgeFg     = q.value("badge_fg").toString();
@@ -537,17 +659,82 @@ void VaccinationsWidget::appendRows(int offset)
         tbl->insertRow(row);
         tbl->setRowHeight(row, 44);
 
-        tbl->setItem(row, 0, makeItem(animalName));
-        tbl->setCellWidget(row, 1, makeBadge(typeName, badgeBg, badgeFg));
-        tbl->setItem(row, 2, makeItem(ownerName));
-        auto* phoneItem = new QTableWidgetItem(phone);
-        phoneItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        tbl->setItem(row, 3, phoneItem);
-        tbl->setItem(row, 4, makeItem(vaccineName));
-        tbl->setItem(row, 5, makeItem(PersianDate::toDisplayShort(vacDate)));
-        tbl->setItem(row, 6, makeItem(PersianDate::toDisplayShort(nextDate)));
-        tbl->setCellWidget(row, 7, makeBadge(statusText, statusBg, statusFg));
-        tbl->setCellWidget(row, 8, makeActionButtons(vacId));
+        // helper: QLabel ساده برای ستون‌های کپی‌پذیر — کپی از viewport handle میشه
+        auto makeCopyLabel = [&](const QString& text) -> QLabel* {
+            auto* lbl = new QLabel(text);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setStyleSheet("background: transparent; color: #212121; padding: 0 4px;");
+            return lbl;
+        };
+
+        // Col 0: row number
+        tbl->setItem(row, 0, makeItem(QString::number(row + 1)));
+
+        // Col 1: file number — کپی با کلیک راست
+        tbl->setCellWidget(row, 1, makeCopyLabel(fileNumber));
+
+        // Col 2: animal name — clickable, navigates to animal profile
+        auto* animalLbl = new QLabel(animalName);
+        animalLbl->setAlignment(Qt::AlignCenter);
+        animalLbl->setCursor(Qt::PointingHandCursor);
+        animalLbl->setStyleSheet(
+            "color: #212121; background: transparent;");
+        connect(animalLbl, &QLabel::linkActivated, this, []{});
+        // Use event filter via mouse press — simpler with a wrapper widget
+        {
+            auto* w   = new QWidget;
+            auto* lay = new QVBoxLayout(w);
+            lay->setContentsMargins(4, 0, 4, 0);
+            lay->addWidget(animalLbl);
+            w->setStyleSheet("background: transparent;");
+            int capturedAnimalId = animalId;
+            animalLbl->installEventFilter(this);
+            animalLbl->setProperty("animalId",     capturedAnimalId);
+            animalLbl->setProperty("isAnimalLink", true);
+            animalLbl->setProperty("copyValue",    animalName);
+            tbl->setCellWidget(row, 2, w);
+        }
+
+        // Col 3: animal type badge
+        tbl->setCellWidget(row, 3, makeBadge(typeName, badgeBg, badgeFg));
+
+        // Col 4: owner name — clickable, navigates to owner profile
+        auto* ownerLbl = new QLabel(ownerName);
+        ownerLbl->setAlignment(Qt::AlignCenter);
+        ownerLbl->setCursor(Qt::PointingHandCursor);
+        ownerLbl->setStyleSheet(
+            "color: #212121; background: transparent;");
+        {
+            auto* w   = new QWidget;
+            auto* lay = new QVBoxLayout(w);
+            lay->setContentsMargins(4, 0, 4, 0);
+            lay->addWidget(ownerLbl);
+            w->setStyleSheet("background: transparent;");
+            int capturedOwnerId = ownerId;
+            ownerLbl->installEventFilter(this);
+            ownerLbl->setProperty("ownerId",      capturedOwnerId);
+            ownerLbl->setProperty("isOwnerLink",  true);
+            ownerLbl->setProperty("copyValue",    ownerName);
+            tbl->setCellWidget(row, 4, w);
+        }
+
+        // Col 5: phone — کپی با کلیک راست
+        tbl->setCellWidget(row, 5, makeCopyLabel(phone));
+
+        // Col 6: vaccine name — کپی با کلیک راست
+        tbl->setCellWidget(row, 6, makeCopyLabel(vaccineName));
+
+        // Col 7: vaccination date — کپی با کلیک راست
+        tbl->setCellWidget(row, 7, makeCopyLabel(PersianDate::toDisplayShort(vacDate)));
+
+        // Col 8: next reminder date — کپی با کلیک راست
+        tbl->setCellWidget(row, 8, makeCopyLabel(PersianDate::toDisplayShort(nextDate)));
+
+        // Col 9: status badge
+        tbl->setCellWidget(row, 9, makeBadge(statusText, statusBg, statusFg));
+
+        // Col 10: action buttons
+        tbl->setCellWidget(row, 10, makeActionButtons(vacId));
     }
 
     bool hasMore = (fetched > kPageSize);
@@ -556,7 +743,9 @@ void VaccinationsWidget::appendRows(int offset)
     else
         m_offset = offset + fetched;
 
-    auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
+    // Use outerLayout (page-level) instead of tableCard's layout
+    // This prevents the table from resizing when the button is added/removed
+    auto* outerLayout = qobject_cast<QVBoxLayout*>(this->layout());
 
     if (hasMore) {
         if (!m_loadMoreBtn) {
@@ -565,14 +754,14 @@ void VaccinationsWidget::appendRows(int offset)
             m_loadMoreBtn->setStyleSheet(R"(
                 QPushButton {
                     background: #F1F8E9; border: none;
-                    border-top: 0.5px solid #C8E6C9;
-                    border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;
+                    border: 0.5px solid #C8E6C9;
+                    border-radius: 10px;
                     color: #2E7D32; font-size: 12px; font-weight: 500; padding: 10px;
                 }
                 QPushButton:hover { background: #E8F5E9; }
                 QPushButton:pressed { background: #C8E6C9; }
             )");
-            if (cardLayout) cardLayout->addWidget(m_loadMoreBtn);
+            if (outerLayout) outerLayout->addWidget(m_loadMoreBtn);
             connect(m_loadMoreBtn, &QPushButton::clicked, this, [this]() {
                 appendRows(m_offset);
             });
@@ -582,7 +771,7 @@ void VaccinationsWidget::appendRows(int offset)
         }
     } else {
         if (m_loadMoreBtn) {
-            if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+            if (outerLayout) outerLayout->removeWidget(m_loadMoreBtn);
             m_loadMoreBtn->deleteLater();
             m_loadMoreBtn = nullptr;
         }
@@ -597,8 +786,8 @@ QWidget* VaccinationsWidget::makeBadge(const QString& text,
     container->setLayoutDirection(Qt::RightToLeft);
     container->setStyleSheet("background: transparent;");
     auto* lay = new QHBoxLayout(container);
-    lay->setContentsMargins(8, 2, 8, 2);
-    lay->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    lay->setContentsMargins(4, 2, 4, 2);
+    lay->setAlignment(Qt::AlignCenter);
 
     auto* lbl = new QLabel(text);
     lbl->setAlignment(Qt::AlignCenter);
@@ -609,7 +798,6 @@ QWidget* VaccinationsWidget::makeBadge(const QString& text,
                            ).arg(bg, fg));
 
     lay->addWidget(lbl);
-    lay->addStretch();
     return container;
 }
 
@@ -816,12 +1004,13 @@ int VaccinationsWidget::showAnimalPickerDialog()
         listW->clear();
         QSqlQuery q;
         q.prepare(
-            "SELECT a.id, a.name, a.type, "
+            "SELECT a.id, a.name, at.name AS type_name, at.emoji AS type_emoji, "
             "CONCAT(o.first_name,' ',o.last_name) AS owner, o.phone "
-            "FROM animals a JOIN owners o ON a.owner_id=o.id "
-            "WHERE TRUE "
-            "AND (a.name LIKE :f OR o.first_name LIKE :f2 "
-            "     OR o.last_name LIKE :f3 OR o.phone LIKE :f4) "
+            "FROM animals a "
+            "JOIN owners o ON a.owner_id = o.id "
+            "JOIN animal_types at ON a.animal_type_id = at.id "
+            "WHERE (a.name LIKE :f OR o.first_name LIKE :f2 "
+            "       OR o.last_name LIKE :f3 OR o.phone LIKE :f4) "
             "ORDER BY a.name LIMIT 60"
             );
         QString f = filter.isEmpty() ? "%" : "%" + filter + "%";
@@ -830,8 +1019,7 @@ int VaccinationsWidget::showAnimalPickerDialog()
         q.exec();
 
         while (q.next()) {
-            bool    isDog   = (q.value("type").toString() == "dog");
-            QString typeStr = isDog ? "سگ 🐕" : "گربه 🐈";
+            QString typeStr = q.value("type_emoji").toString() + " " + q.value("type_name").toString();
             QString display = q.value("name").toString()
                               + "   |   " + typeStr
                               + "   |   " + q.value("owner").toString()

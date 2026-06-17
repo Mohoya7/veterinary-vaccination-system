@@ -1,5 +1,6 @@
 #include "reminderswidget.h"
 #include "animaltypeinfo.h"
+#include "styledmessagebox.h"
 #include <QRadioButton>
 #include <QButtonGroup>
 #include "ui_reminderswidget.h"
@@ -19,9 +20,14 @@
 #include <QComboBox>
 #include <QScrollBar>
 #include <QPainter>
+#include <QEvent>
+#include <QMouseEvent>
 #include <QPdfWriter>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QTimer>
+#include <QContextMenuEvent>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constructor / Destructor
@@ -555,7 +561,9 @@ QString RemindersWidget::buildWhereClause() const
 
     if (!search.isEmpty())
         w += "AND (a.name LIKE :search OR o.phone LIKE :search2 "
-             "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3) ";
+             "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3 "
+             "OR a.file_number LIKE :search4 "
+             "OR o.phone_secondary LIKE :search5) ";
 
     if (animalTypeIdx == 1) w += "AND a.animal_type_id = 1 ";
     else if (animalTypeIdx == 2) w += "AND a.animal_type_id = 2 ";
@@ -613,6 +621,8 @@ void RemindersWidget::bindWhereParams(QSqlQuery& q) const
         q.bindValue(":search",  "%" + search + "%");
         q.bindValue(":search2", "%" + search + "%");
         q.bindValue(":search3", "%" + search + "%");
+        q.bindValue(":search4", "%" + search + "%");
+        q.bindValue(":search5", "%" + search + "%");
     }
 }
 
@@ -624,23 +634,25 @@ void RemindersWidget::loadTable()
 {
     auto* tbl = ui->remindersTable;
     tbl->setRowCount(0);
-    tbl->setColumnCount(8);
+    tbl->setColumnCount(11); // +3: row number, file_number, vaccination date
     tbl->setLayoutDirection(Qt::RightToLeft);
 
     QStringList headers = {
-        "حیوان", "نوع", "صاحب", "شماره",
-        "نوع واکسن", "موعد یادآوری", "پیگیری شد", "پاسخ صاحب"
+        "#", "شماره پرونده", "حیوان", "نوع", "صاحب", "شماره",
+        "نوع واکسن", "تاریخ تزریق", "موعد یادآوری", "پیگیری شد", "پاسخ صاحب"
     };
     tbl->setHorizontalHeaderLabels(headers);
 
     auto* hv = tbl->horizontalHeader();
     hv->setLayoutDirection(Qt::RightToLeft);
-    hv->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    hv->setDefaultAlignment(Qt::AlignCenter);
     hv->setSectionResizeMode(QHeaderView::Stretch);
-    hv->setSectionResizeMode(6, QHeaderView::Fixed);
-    hv->setSectionResizeMode(7, QHeaderView::Fixed);
-    tbl->setColumnWidth(6, 110);
-    tbl->setColumnWidth(7, 140);
+    hv->setSectionResizeMode(0,  QHeaderView::Fixed); // row number
+    hv->setSectionResizeMode(9,  QHeaderView::Fixed); // پیگیری شد
+    hv->setSectionResizeMode(10, QHeaderView::Fixed); // پاسخ صاحب
+    tbl->setColumnWidth(0,  45);
+    tbl->setColumnWidth(9,  110);
+    tbl->setColumnWidth(10, 140);
 
     tbl->verticalHeader()->setVisible(false);
     tbl->setShowGrid(false);
@@ -648,6 +660,7 @@ void RemindersWidget::loadTable()
     tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
     tbl->setFocusPolicy(Qt::NoFocus);
     tbl->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    tbl->viewport()->installEventFilter(this);
     tbl->verticalScrollBar()->setStyleSheet(R"(
         QScrollBar:vertical {
             background: transparent; width: 6px;
@@ -666,8 +679,8 @@ void RemindersWidget::loadTable()
 
     // Remove old "Show More" button if it exists
     if (m_loadMoreBtn) {
-        auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
-        if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+        auto* outer = qobject_cast<QVBoxLayout*>(this->layout());
+        if (outer) outer->removeWidget(m_loadMoreBtn);
         m_loadMoreBtn->deleteLater();
         m_loadMoreBtn = nullptr;
     }
@@ -676,16 +689,120 @@ void RemindersWidget::loadTable()
     appendRows(0);
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Table — append next page
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// eventFilter — handles clicks on animal/owner name labels in table
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// showToast — پیام کوچک "کپی شد" در پایین صفحه برای ~1.5 ثانیه
+// ─────────────────────────────────────────────────────────────────────────────
+
+void RemindersWidget::showToast(const QString& message)
+{
+    if (auto* old = findChild<QLabel*>("toastLabel"))
+        old->deleteLater();
+
+    auto* toast = new QLabel(message, this);
+    toast->setObjectName("toastLabel");
+    toast->setAlignment(Qt::AlignCenter);
+    toast->setStyleSheet(R"(
+        QLabel {
+            background: rgba(33,33,33,210);
+            color: white;
+            border-radius: 8px;
+            font-size: 12px;
+            padding: 8px 20px;
+        }
+    )");
+    toast->adjustSize();
+    toast->setFixedHeight(36);
+
+    int x = (width()  - toast->width())  / 2;
+    int y =  height() - toast->height() - 20;
+    toast->move(x, y);
+    toast->raise();
+    toast->show();
+
+    QTimer::singleShot(1500, toast, &QLabel::deleteLater);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// eventFilter
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool RemindersWidget::eventFilter(QObject* obj, QEvent* ev)
+{
+    // ── viewport جدول: کلیک چپ → کپی مقدار ستون ─────────────────────────────
+    if (obj == ui->remindersTable->viewport()
+        && ev->type() == QEvent::MouseButtonPress)
+    {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        if (me->button() == Qt::RightButton || me->button() == Qt::LeftButton) {
+            auto* tbl = ui->remindersTable;
+            int col = tbl->columnAt(me->pos().x());
+            int row = tbl->rowAt(me->pos().y());
+            if (row < 0 || col < 0)
+                return QWidget::eventFilter(obj, ev);
+
+            // ستون‌های کپی‌پذیر: 1=شماره پرونده، 5=شماره، 6=نوع واکسن، 7=تاریخ تزریق، 8=موعد یادآوری
+            QString copyText;
+            if (col == 1 || col == 5 || col == 6 || col == 7 || col == 8) {
+                if (auto* lbl = qobject_cast<QLabel*>(tbl->cellWidget(row, col)))
+                    copyText = lbl->text();
+                else if (auto* item = tbl->item(row, col))
+                    copyText = item->text();
+            }
+
+            if (!copyText.isEmpty()) {
+                QApplication::clipboard()->setText(copyText);
+                showToast("کپی شد ✓");
+                return true;
+            }
+        }
+        return QWidget::eventFilter(obj, ev);
+    }
+
+    // ── لیبل‌های لینک‌دار (حیوان / صاحب) ────────────────────────────────────
+    auto* lbl = qobject_cast<QLabel*>(obj);
+    if (!lbl) return QWidget::eventFilter(obj, ev);
+
+    bool isLink = lbl->property("isAnimalLink").toBool()
+                  || lbl->property("isOwnerLink").toBool();
+    if (!isLink) return QWidget::eventFilter(obj, ev);
+
+    if (ev->type() == QEvent::Enter) {
+        lbl->setStyleSheet("color: #212121; text-decoration: underline; background: transparent;");
+        return false;
+    }
+    if (ev->type() == QEvent::Leave) {
+        lbl->setStyleSheet("color: #212121; background: transparent;");
+        return false;
+    }
+    if (ev->type() == QEvent::MouseButtonPress) {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        if (me->button() == Qt::RightButton) {
+            // ستون حیوان و صاحب: چپ کلیک → کپی (چون لینک navigate دارن)
+            QApplication::clipboard()->setText(lbl->property("copyValue").toString());
+            showToast("کپی شد ✓");
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
 void RemindersWidget::appendRows(int offset)
 {
     QString sql =
-        "SELECT DISTINCT rf.id AS rf_id, a.name AS animal_name, a.animal_type_id, "
+        "SELECT DISTINCT rf.id AS rf_id, "
+        "a.id AS animal_id, a.name AS animal_name, a.file_number, a.animal_type_id, "
+        "o.id AS owner_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
-        "vt.name AS vaccine_name, v.next_reminder_at, "
+        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at, "
         "rf.is_followed_up, rf.owner_responded "
         "FROM reminder_followups rf "
         "JOIN vaccinations v ON rf.vaccination_id = v.id "
@@ -699,7 +816,7 @@ void RemindersWidget::appendRows(int offset)
     QSqlQuery q;
     q.prepare(sql);
     bindWhereParams(q);
-    q.bindValue(":limit",  kPageSize + 1); // Fetch one extra to determine if there is a next page
+    q.bindValue(":limit",  kPageSize + 1);
     q.bindValue(":offset", offset);
 
     if (!q.exec()) return;
@@ -710,20 +827,24 @@ void RemindersWidget::appendRows(int offset)
 
     auto makeItem = [](const QString& text) {
         auto* item = new QTableWidgetItem(text);
-        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        item->setTextAlignment(Qt::AlignCenter);
         return item;
     };
 
     while (q.next()) {
         fetched++;
-        if (fetched > kPageSize) break; // Do not display the extra record
+        if (fetched > kPageSize) break;
 
         int     rfId         = q.value("rf_id").toInt();
+        int     animalId     = q.value("animal_id").toInt();
+        int     ownerId      = q.value("owner_id").toInt();
         QString animalName   = q.value("animal_name").toString();
+        QString fileNumber   = q.value("file_number").toString();
         auto    ti           = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
         QString ownerName    = q.value("owner_name").toString();
         QString phone        = q.value("phone").toString();
         QString vaccineName  = q.value("vaccine_name").toString();
+        QDate   vacDate      = q.value("vaccinated_at").toDate();
         QDate   reminderDate = q.value("next_reminder_at").toDate();
         bool    isFollowedUp = q.value("is_followed_up").toBool();
         QVariant ownerResp   = q.value("owner_responded");
@@ -731,33 +852,80 @@ void RemindersWidget::appendRows(int offset)
         tbl->insertRow(row);
         tbl->setRowHeight(row, 46);
 
-        tbl->setItem(row, 0, makeItem(animalName));
-        tbl->setCellWidget(row, 1, makeBadge(
-                                       ti.name,
-                                       ti.badgeBg,
-                                       ti.badgeFg));
-        tbl->setItem(row, 2, makeItem(ownerName));
-        tbl->setItem(row, 3, makeItem(phone));
-        tbl->setItem(row, 4, makeItem(vaccineName));
-        tbl->setItem(row, 5, makeItem(PersianDate::toDisplayShort(reminderDate)));
+        // Col 0: row number
+        tbl->setItem(row, 0, makeItem(QString::number(row + 1)));
 
-        // Follow-up checkbox
+        // Col 1: file number
+        tbl->setItem(row, 1, makeItem(fileNumber));
+
+        // Col 2: animal name — clickable
+        auto* animalLbl = new QLabel(animalName);
+        animalLbl->setAlignment(Qt::AlignCenter);
+        animalLbl->setCursor(Qt::PointingHandCursor);
+        animalLbl->setStyleSheet(
+            "color: #212121; background: transparent;");
+        animalLbl->installEventFilter(this);
+        animalLbl->setProperty("animalId",      animalId);
+        animalLbl->setProperty("isAnimalLink",  true);
+        {
+            auto* w   = new QWidget;
+            auto* lay = new QVBoxLayout(w);
+            lay->setContentsMargins(4, 0, 4, 0);
+            lay->addWidget(animalLbl);
+            w->setStyleSheet("background: transparent;");
+            tbl->setCellWidget(row, 2, w);
+        }
+
+        // Col 3: animal type badge
+        tbl->setCellWidget(row, 3, makeBadge(ti.name, ti.badgeBg, ti.badgeFg));
+
+        // Col 4: owner name — clickable
+        auto* ownerLbl = new QLabel(ownerName);
+        ownerLbl->setAlignment(Qt::AlignCenter);
+        ownerLbl->setCursor(Qt::PointingHandCursor);
+        ownerLbl->setStyleSheet(
+            "color: #212121; background: transparent;");
+        ownerLbl->installEventFilter(this);
+        ownerLbl->setProperty("ownerId",       ownerId);
+        ownerLbl->setProperty("isOwnerLink",   true);
+        {
+            auto* w   = new QWidget;
+            auto* lay = new QVBoxLayout(w);
+            lay->setContentsMargins(4, 0, 4, 0);
+            lay->addWidget(ownerLbl);
+            w->setStyleSheet("background: transparent;");
+            tbl->setCellWidget(row, 4, w);
+        }
+
+        // Col 5: phone
+        tbl->setItem(row, 5, makeItem(phone));
+
+        // Col 6: vaccine name
+        tbl->setItem(row, 6, makeItem(vaccineName));
+
+        // Col 7: vaccination date
+        tbl->setItem(row, 7, makeItem(PersianDate::toDisplayShort(vacDate)));
+
+        // Col 8: reminder date
+        tbl->setItem(row, 8, makeItem(PersianDate::toDisplayShort(reminderDate)));
+
+        // Col 9: follow-up checkbox
         auto* cbContainer = new QWidget;
         cbContainer->setStyleSheet("background: transparent;");
         auto* cbLay = new QHBoxLayout(cbContainer);
         cbLay->setContentsMargins(0, 0, 0, 0);
-        cbLay->setAlignment(Qt::AlignLeft);
+        cbLay->setAlignment(Qt::AlignCenter);
         auto* cb = new QCheckBox;
         cb->setChecked(isFollowedUp);
         cbLay->addWidget(cb);
         connect(cb, &QCheckBox::toggled, this, [this, rfId](bool checked) {
             onFollowUpChanged(rfId, checked);
         });
-        tbl->setCellWidget(row, 6, cbContainer);
+        tbl->setCellWidget(row, 9, cbContainer);
 
-        // Owner response combo
+        // Col 10: owner response combo
         int currentResp = ownerResp.isNull() ? 0 : (ownerResp.toBool() ? 1 : 2);
-        tbl->setCellWidget(row, 7, makeResponseCombo(rfId, currentResp));
+        tbl->setCellWidget(row, 10, makeResponseCombo(rfId, currentResp));
 
         row++;
     }
@@ -774,8 +942,9 @@ void RemindersWidget::appendRows(int offset)
 
     tbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // Manage "Show More" button
-    auto* cardLayout = qobject_cast<QVBoxLayout*>(ui->tableCard->layout());
+    // Manage "Show More" button — added to outerLayout (page level)
+    // to prevent table resize when button is added/removed
+    auto* outerLayout = qobject_cast<QVBoxLayout*>(this->layout());
 
     if (hasMore) {
         if (!m_loadMoreBtn) {
@@ -784,10 +953,8 @@ void RemindersWidget::appendRows(int offset)
             m_loadMoreBtn->setStyleSheet(R"(
                 QPushButton {
                     background: #F1F8E9;
-                    border: none;
-                    border-top: 0.5px solid #C8E6C9;
-                    border-bottom-left-radius: 10px;
-                    border-bottom-right-radius: 10px;
+                    border: 0.5px solid #C8E6C9;
+                    border-radius: 10px;
                     color: #2E7D32;
                     font-size: 12px;
                     font-weight: 500;
@@ -796,7 +963,7 @@ void RemindersWidget::appendRows(int offset)
                 QPushButton:hover { background: #E8F5E9; }
                 QPushButton:pressed { background: #C8E6C9; }
             )");
-            if (cardLayout) cardLayout->addWidget(m_loadMoreBtn);
+            if (outerLayout) outerLayout->addWidget(m_loadMoreBtn);
             connect(m_loadMoreBtn, &QPushButton::clicked,
                     this, &RemindersWidget::onLoadMoreClicked);
         } else {
@@ -806,7 +973,7 @@ void RemindersWidget::appendRows(int offset)
     } else {
         // All records loaded — remove button
         if (m_loadMoreBtn) {
-            if (cardLayout) cardLayout->removeWidget(m_loadMoreBtn);
+            if (outerLayout) outerLayout->removeWidget(m_loadMoreBtn);
             m_loadMoreBtn->deleteLater();
             m_loadMoreBtn = nullptr;
         }
@@ -824,8 +991,8 @@ QWidget* RemindersWidget::makeBadge(const QString& text,
     auto* container = new QWidget;
     container->setStyleSheet("background: transparent;");
     auto* lay = new QHBoxLayout(container);
-    lay->setContentsMargins(8, 2, 8, 2);
-    lay->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    lay->setContentsMargins(4, 2, 4, 2);
+    lay->setAlignment(Qt::AlignCenter);
 
     auto* lbl = new QLabel(text);
     lbl->setAlignment(Qt::AlignCenter);
@@ -835,18 +1002,30 @@ QWidget* RemindersWidget::makeBadge(const QString& text,
                            "font-size:11px;font-weight:500;padding:2px 8px;"
                            ).arg(bg, fg));
     lay->addWidget(lbl);
-    lay->addStretch();
     return container;
 }
 
 QWidget* RemindersWidget::makeResponseCombo(int rfId, int currentResponse)
 {
+    // outer: fills the entire cell
     auto* container = new QWidget;
     container->setStyleSheet("background: transparent;");
-    auto* lay = new QHBoxLayout(container);
-    lay->setContentsMargins(4, 4, 4, 4);
+    auto* outerLay = new QVBoxLayout(container);
+    outerLay->setContentsMargins(0, 0, 0, 0);
+    outerLay->setSpacing(0);
+    outerLay->setAlignment(Qt::AlignVCenter);
+
+    // inner: holds the combo
+    auto* inner = new QWidget;
+    inner->setStyleSheet("background: transparent;");
+    auto* lay = new QHBoxLayout(inner);
+    lay->setContentsMargins(4, 0, 4, 0);
+    lay->setSpacing(0);
+    lay->setAlignment(Qt::AlignCenter);
+    outerLay->addWidget(inner, 0, Qt::AlignVCenter);
 
     auto* combo = new QComboBox;
+    combo->setFixedSize(110, 29); // fixed size — key to vertical centering
     combo->addItem("در انتظار");
     combo->addItem("جواب داد");
     combo->addItem("جواب نداد");
@@ -859,7 +1038,6 @@ QWidget* RemindersWidget::makeResponseCombo(int rfId, int currentResponse)
             padding: 3px 8px;
             font-size: 11px;
             color: #212121;
-            min-height: 26px;
         }
         QComboBox:hover { border-color: #2E7D32; }
         QComboBox::drop-down { border: none; width: 20px; }
@@ -926,13 +1104,15 @@ void RemindersWidget::onOwnerResponseChanged(int rfId, int responseIndex)
 void RemindersWidget::onExportPdfClicked()
 {
     QString path = QFileDialog::getSaveFileName(
-        this, "Save PDF", "Reminders.pdf", "PDF Files (*.pdf)");
+        this, "ذخیره PDF", "یادآوری‌ها.pdf", "PDF Files (*.pdf)");
     if (path.isEmpty()) return;
 
+    // Full query — no LIMIT, all records matching current filters
     QString sql =
-        "SELECT DISTINCT a.name AS animal_name, a.animal_type_id, "
+        "SELECT DISTINCT rf.id AS rf_id, "
+        "a.name AS animal_name, a.file_number, a.animal_type_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
-        "vt.name AS vaccine_name, v.next_reminder_at, "
+        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at, "
         "rf.is_followed_up, rf.owner_responded "
         "FROM reminder_followups rf "
         "JOIN vaccinations v ON rf.vaccination_id = v.id "
@@ -941,78 +1121,161 @@ void RemindersWidget::onExportPdfClicked()
         "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
         + buildWhereClause()
         + "ORDER BY v.next_reminder_at ASC";
-    // ← Without LIMIT — all records
 
     QSqlQuery q;
     q.prepare(sql);
     bindWhereParams(q);
 
     if (!q.exec()) {
-        QMessageBox::critical(this, "Error", "Error retrieving data.");
+        StyledMessageBox::error(this, "خطا", "خطا در دریافت داده‌ها.");
         return;
+    }
+
+    // ── Build filter description for PDF header ───────────────────────────────
+    QString filterDesc;
+    if (m_subManualMode) {
+        int  days     = m_daysSpin ? m_daysSpin->value() : 7;
+        bool isFuture = m_dirBtn ? m_dirBtn->property("isFuture").toBool() : true;
+        filterDesc = QString("%1 روز %2").arg(days).arg(isFuture ? "آینده" : "گذشته");
+    } else {
+        QDate from = m_pickerFrom ? m_pickerFrom->date() : QDate::currentDate();
+        QDate to   = m_pickerTo   ? m_pickerTo->date()   : QDate::currentDate();
+        if (from == to)
+            filterDesc = PersianDate::toDisplayShort(from);
+        else
+            filterDesc = PersianDate::toDisplayShort(from) + " تا " +
+                         PersianDate::toDisplayShort(to);
     }
 
     QPdfWriter writer(path);
     writer.setPageSize(QPageSize(QPageSize::A4));
-    writer.setPageMargins(QMarginsF(15, 15, 15, 15), QPageLayout::Millimeter);
+    writer.setPageOrientation(QPageLayout::Landscape);
+    writer.setPageMargins(QMarginsF(10, 10, 10, 10), QPageLayout::Millimeter);
 
     QPainter painter(&writer);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QFont titleFont("Arial", 14, QFont::Bold);
-    QFont headerFont("Arial", 9, QFont::Bold);
-    QFont cellFont("Arial", 8);
+    QFont titleFont ("Arial", 16, QFont::Bold);
+    QFont subFont   ("Arial", 10);
+    QFont headerFont("Arial",  9, QFont::Bold);
+    QFont cellFont  ("Arial",  8);
 
     int pageW = writer.width();
-    int y = 100;
+    int y     = 80;
 
+    // Title
     painter.setFont(titleFont);
-    painter.drawText(QRect(0, y, pageW, 200), Qt::AlignCenter, "Vaccination Reminder List");
+    painter.setPen(QColor("#1B5E20"));
+    painter.drawText(QRect(0, y, pageW, 220), Qt::AlignCenter,
+                     "لیست یادآوری‌های واکسیناسیون");
     y += 260;
 
-    painter.setFont(cellFont);
-    painter.drawText(QRect(0, y, pageW, 150), Qt::AlignCenter,
-                     "Date: " + PersianDate::todayDisplay());
+    // Filter description
+    painter.setFont(subFont);
+    painter.setPen(QColor("#555555"));
+    painter.drawText(QRect(0, y, pageW, 160), Qt::AlignCenter,
+                     "بازه زمانی: " + filterDesc);
     y += 220;
 
-    QStringList cols = {"Animal", "Owner", "Phone", "Vaccine", "Reminder Date", "Follow-up"};
-    int colW = pageW / cols.size();
-    int rowH = 180;
+    // Columns — reversed order (PDF is LTR but we want RTL appearance)
+    // App order: #, Case No., Animal, Type, Owner, Number, Vaccine Type,
+    // Injection Date, Reminder Due Date, Followed, Owner Response
+    // PDF reversed: Owner Response, Followed, Reminder Due Date, ...,
+    struct ColDef { QString header; int weight; };
+    QList<ColDef> colDefs = {
+        {"پاسخ صاحب",        2},
+        {"پیگیری شد",        2},
+        {"موعد یادآوری",     2},
+        {"تاریخ تزریق",      2},
+        {"نوع واکسن",        3},
+        {"شماره",            2},
+        {"صاحب",             3},
+        {"نوع",              2},
+        {"حیوان",            2},
+        {"شماره پرونده",     2},
+        {"#",                1}
+    };
 
-    painter.setFont(headerFont);
-    painter.fillRect(0, y, pageW, rowH, QColor("#E8F5E9"));
-    painter.setPen(QColor("#1B5E20"));
-    for (int i = 0; i < cols.size(); i++)
-        painter.drawText(QRect(i * colW, y, colW, rowH), Qt::AlignCenter, cols[i]);
-    y += rowH;
+    int totalWeight = 0;
+    for (const auto& c : colDefs) totalWeight += c.weight;
+    QVector<int> colWidths, colX;
+    int cx = 0;
+    for (const auto& c : colDefs) {
+        int w = (pageW * c.weight) / totalWeight;
+        colWidths.append(w);
+        colX.append(cx);
+        cx += w;
+    }
 
-    painter.setFont(cellFont);
-    painter.setPen(Qt::black);
+    int rowH = 200;
+
+    // Draw header row
+    auto drawHeader = [&]() {
+        painter.setFont(headerFont);
+        painter.fillRect(0, y, pageW, rowH, QColor("#E8F5E9"));
+        painter.setPen(QColor("#1B5E20"));
+        for (int i = 0; i < colDefs.size(); i++)
+            painter.drawText(QRect(colX[i], y, colWidths[i], rowH),
+                             Qt::AlignCenter, colDefs[i].header);
+        y += rowH;
+    };
+
+    drawHeader();
+
     int rowNum = 0;
     while (q.next()) {
-        if (y + rowH > writer.height() - 200) {
+        if (y + rowH > writer.height() - 150) {
             writer.newPage();
-            y = 100;
+            y = 80;
+            drawHeader();
         }
-        if (rowNum % 2 == 0)
-            painter.fillRect(0, y, pageW, rowH, QColor("#FAFAFA"));
 
-        QStringList rowData = {
-            q.value("animal_name").toString(),
-            q.value("owner_name").toString(),
-            q.value("phone").toString(),
-            q.value("vaccine_name").toString(),
-            PersianDate::toDisplayShort(q.value("next_reminder_at").toDate()),
-            q.value("is_followed_up").toBool() ? "Followed up" : "Pending"
+        // Alternating background
+        painter.fillRect(0, y, pageW, rowH,
+                         rowNum % 2 == 0 ? QColor("#FAFAFA") : Qt::white);
+
+        auto     ti        = AnimalTypeInfo::get(q.value("animal_type_id").toInt());
+        QVariant ownerResp = q.value("owner_responded");
+        int      respIdx   = ownerResp.isNull() ? 0 : (ownerResp.toBool() ? 1 : 2);
+        QStringList respLabels = {"در انتظار", "جواب داد", "جواب نداد"};
+        bool isFollowedUp = q.value("is_followed_up").toBool();
+
+        // Cell data — same reversed order as colDefs
+        struct Cell { QString text; QColor color; bool bold; };
+        QList<Cell> cells = {
+            {respLabels[respIdx],                                        Qt::black,           false},
+            {isFollowedUp ? "بله" : "خیر",
+             isFollowedUp ? QColor("#2E7D32") : QColor("#C62828"),       true},
+            {PersianDate::toDisplayShort(q.value("next_reminder_at").toDate()), Qt::black,   false},
+            {PersianDate::toDisplayShort(q.value("vaccinated_at").toDate()),    Qt::black,   false},
+            {q.value("vaccine_name").toString(),                         Qt::black,           false},
+            {q.value("phone").toString(),                                Qt::black,           false},
+            {q.value("owner_name").toString(),                           Qt::black,           false},
+            {ti.name,                                                    QColor(ti.badgeFg),  false},
+            {q.value("animal_name").toString(),                          Qt::black,           false},
+            {q.value("file_number").toString(),                          Qt::black,           false},
+            {QString::number(rowNum + 1),                                Qt::black,           false}
         };
-        for (int i = 0; i < rowData.size(); i++)
-            painter.drawText(QRect(i * colW, y, colW, rowH), Qt::AlignCenter, rowData[i]);
+
+        for (int i = 0; i < cells.size(); i++) {
+            painter.setFont(cells[i].bold
+                                ? QFont("Arial", 8, QFont::Bold)
+                                : cellFont);
+            painter.setPen(cells[i].color);
+            painter.drawText(QRect(colX[i], y, colWidths[i], rowH),
+                             Qt::AlignCenter, cells[i].text);
+        }
+
+        // Grid line
+        painter.setPen(QColor("#E0E0E0"));
+        painter.drawLine(0, y + rowH - 1, pageW, y + rowH - 1);
 
         y += rowH;
         rowNum++;
     }
+
     painter.end();
 
-    QMessageBox::information(this, "Success",
-                             QString("PDF file saved successfully.\n%1 rows printed.").arg(rowNum));
+    StyledMessageBox::success(this, "موفق",
+                              QString("فایل PDF با موفقیت ذخیره شد.\n%1 ردیف چاپ شد.").arg(rowNum));
 }

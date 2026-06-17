@@ -32,7 +32,7 @@
         </item>
         <item>
          <widget class="QLineEdit" name="searchEdit">
-          <property name="placeholderText"><string>نام حیوان، نام صاحب یا شماره تماس را  جستوجو کنید.</string></property>
+          <property name="placeholderText"><string>نام حیوان، نام صاحب، شماره تماس یا پرونده را جستوجو کنید.</string></property>
           <property name="minimumWidth"><number>180</number></property>
          </widget>
         </item>

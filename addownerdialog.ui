@@ -2,7 +2,7 @@
 <ui version="4.0">
  <class>AddOwnerDialog</class>
  <widget class="QDialog" name="AddOwnerDialog">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>420</width><height>420</height></rect></property>
+  <property name="geometry"><rect><x>0</x><y>0</y><width>420</width><height>450</height></rect></property>
   <property name="windowTitle"><string>افزودن صاحب جدید</string></property>
   <property name="layoutDirection"><enum>Qt::RightToLeft</enum></property>
   <layout class="QVBoxLayout" name="mainLayout">
@@ -45,16 +45,24 @@
       <item row="1" column="1"><widget class="QLineEdit" name="lastNameEdit"><property name="placeholderText"><string>نام خانوادگی</string></property></widget></item>
 
       <item row="2" column="0"><widget class="QLabel" name="label3"><property name="text"><string>شماره اول *</string></property></widget></item>
-      <item row="2" column="1"><widget class="QLineEdit" name="phoneEdit"><property name="placeholderText"><string>09...</string></property></widget></item>
+      <item row="2" column="1"><widget class="QLineEdit" name="phoneEdit"><property name="placeholderText"><string>شماره تماس</string></property></widget></item>
 
       <item row="3" column="0"><widget class="QLabel" name="label4"><property name="text"><string>شماره دوم</string></property></widget></item>
       <item row="3" column="1"><widget class="QLineEdit" name="phone2Edit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
 
-      <item row="4" column="0"><widget class="QLabel" name="label5"><property name="text"><string>آدرس</string></property></widget></item>
-      <item row="4" column="1"><widget class="QLineEdit" name="addressEdit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
+      <item row="4" column="0"><widget class="QLabel" name="label7"><property name="text"><string>جنسیت *</string></property></widget></item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="genderCombo">
+        <item><property name="text"><string>مرد</string></property></item>
+        <item><property name="text"><string>زن</string></property></item>
+       </widget>
+      </item>
 
-      <item row="5" column="0"><widget class="QLabel" name="label6"><property name="text"><string>یادداشت</string></property></widget></item>
-      <item row="5" column="1"><widget class="QLineEdit" name="notesEdit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
+      <item row="5" column="0"><widget class="QLabel" name="label5"><property name="text"><string>آدرس</string></property></widget></item>
+      <item row="5" column="1"><widget class="QLineEdit" name="addressEdit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
+
+      <item row="6" column="0"><widget class="QLabel" name="label6"><property name="text"><string>یادداشت</string></property></widget></item>
+      <item row="6" column="1"><widget class="QLineEdit" name="notesEdit"><property name="placeholderText"><string>اختیاری</string></property></widget></item>
      </layout>
     </widget>
    </item>

@@ -69,7 +69,7 @@
         <item><spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
         <item>
          <widget class="QLineEdit" name="searchEdit">
-          <property name="placeholderText"><string>جستوجو نام حیوان، نام صاحب یا شماره تماس</string></property>
+          <property name="placeholderText"><string>نام حیوان، نام صاحب، شماره تماس یا پرونده را جستوجو کنید.</string></property>
           <property name="minimumWidth"><number>220</number></property>
           <property name="minimumHeight"><number>34</number></property>
          </widget>

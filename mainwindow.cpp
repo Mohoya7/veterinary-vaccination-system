@@ -332,6 +332,26 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
         m_animals->showAnimalById(animalId);
     });
 
+    // Navigation from vaccinations table
+    connect(m_vaccinations, &VaccinationsWidget::navigateToAnimal, this, [this](int animalId) {
+        ui->btnAnimals->click();
+        m_animals->showAnimalById(animalId);
+    });
+    connect(m_vaccinations, &VaccinationsWidget::navigateToOwner, this, [this](int ownerId) {
+        ui->btnOwners->click();
+        m_owners->showOwnerById(ownerId);
+    });
+
+    // Navigation from reminders table
+    connect(m_reminders, &RemindersWidget::navigateToAnimal, this, [this](int animalId) {
+        ui->btnAnimals->click();
+        m_animals->showAnimalById(animalId);
+    });
+    connect(m_reminders, &RemindersWidget::navigateToOwner, this, [this](int ownerId) {
+        ui->btnOwners->click();
+        m_owners->showOwnerById(ownerId);
+    });
+
     showMaximized();
 }
 

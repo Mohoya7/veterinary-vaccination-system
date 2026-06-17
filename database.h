@@ -45,7 +45,6 @@ public:
             "FROM animals "
             "WHERE SUBSTRING(file_number, 1, 4) = :year "
             "  AND SUBSTRING(file_number, 5, 2) = :type "
-            "  AND is_deleted = FALSE"
             );
         q.bindValue(":year", yearStr);
         q.bindValue(":type", typeCode);
