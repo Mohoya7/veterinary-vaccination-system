@@ -9,23 +9,76 @@
 #include <QFrame>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QToolButton>
+#include <QSvgRenderer>
+#include <QPainter>
+#include <QRegularExpressionValidator>
 
-UsersTab::UsersTab(QWidget* parent)
-    : QWidget(parent)
+// ── Helper: eye toggle button ─────────────────────────────────────────────────
+static QToolButton* makeEyeBtn(QWidget* parent)
 {
-    setLayoutDirection(Qt::RightToLeft);
+    auto* btn = new QToolButton(parent);
+    btn->setFixedSize(36, 36);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setCheckable(true);
+    btn->setChecked(false);
+    btn->setStyleSheet(R"(
+        QToolButton { background: transparent; border: none; padding: 0px; }
+        QToolButton:hover { background: transparent; }
+    )");
 
-    if (Session::instance().isAdmin()) {
-        buildAdminView();
-    } else {
-        buildTechnicianView();
-    }
+    auto setIcon = [btn](bool visible) {
+        QString path = visible ? ":/icons/eye.svg" : ":/icons/eye-off.svg";
+        QSvgRenderer renderer(path);
+        QPixmap px(18, 18);
+        px.fill(Qt::transparent);
+        QPainter p(&px);
+        renderer.render(&p);
+        p.end();
+        QPixmap tinted(px.size());
+        tinted.fill(Qt::transparent);
+        QPainter pt(&tinted);
+        pt.drawPixmap(0, 0, px);
+        pt.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        pt.fillRect(tinted.rect(), QColor("#9E9E9E"));
+        pt.end();
+        btn->setIcon(QIcon(tinted));
+        btn->setIconSize(QSize(18, 18));
+    };
+    setIcon(false);
 
-    applyStyle();
+    QObject::connect(btn, &QToolButton::toggled, [btn, setIcon](bool checked) {
+        setIcon(checked);
+    });
+
+    return btn;
 }
 
-// ── Helper: build a section card ─────────────────────────────────────────────
+// ── Helper: password field with eye toggle ────────────────────────────────────
+static QWidget* makePasswordWidget(QLineEdit* edit, QWidget* parent)
+{
+    // Apply constraints: max 30, no space/tab, allowed chars only
+    auto* v = new QRegularExpressionValidator(
+        QRegularExpression("[a-zA-Z0-9@#$%&*!._\\-+=?/]*"), edit);
+    edit->setValidator(v);
+    edit->setMaxLength(30);
 
+    auto* eyeBtn = makeEyeBtn(parent);
+    QObject::connect(eyeBtn, &QToolButton::toggled, [edit](bool checked) {
+        edit->setEchoMode(checked ? QLineEdit::Normal : QLineEdit::Password);
+    });
+
+    auto* w   = new QWidget;
+    w->setStyleSheet("background:transparent;");
+    auto* lay = new QHBoxLayout(w);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(4);
+    lay->addWidget(edit);
+    lay->addWidget(eyeBtn);
+    return w;
+}
+
+// ── Helper: card ──────────────────────────────────────────────────────────────
 static QWidget* makeCard(const QString& title, QLayout* contentLay)
 {
     auto* card = new QWidget;
@@ -47,20 +100,40 @@ static QWidget* makeCard(const QString& title, QLayout* contentLay)
     return card;
 }
 
-static QWidget* makeField(const QString& label, QLineEdit* edit)
+static QWidget* makeField(const QString& label, QWidget* widget)
 {
     auto* row = new QWidget;
+    row->setStyleSheet("background:transparent;");
     auto* lay = new QVBoxLayout(row);
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(4);
     auto* lbl = new QLabel(label);
     lbl->setObjectName("fieldLabel");
     lay->addWidget(lbl);
-    lay->addWidget(edit);
+    lay->addWidget(widget);
     return row;
 }
 
-// ── Admin view ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Constructor
+// ─────────────────────────────────────────────────────────────────────────────
+
+UsersTab::UsersTab(QWidget* parent)
+    : QWidget(parent)
+{
+    setLayoutDirection(Qt::RightToLeft);
+
+    if (Session::instance().isAdmin())
+        buildAdminView();
+    else
+        buildTechnicianView();
+
+    applyStyle();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin view
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::buildAdminView()
 {
@@ -72,7 +145,7 @@ void UsersTab::buildAdminView()
     pageTitle->setObjectName("pageTitle");
     rootLay->addWidget(pageTitle);
 
-    // ── Section 1: Change own password ──────────────────────────────────────
+    // ── Section 1: Change admin password ────────────────────────────────────
     m_currentPassEdit = new QLineEdit;
     m_currentPassEdit->setEchoMode(QLineEdit::Password);
     m_currentPassEdit->setPlaceholderText("رمز فعلی");
@@ -90,10 +163,11 @@ void UsersTab::buildAdminView()
 
     auto* ownLay = new QVBoxLayout;
     ownLay->setSpacing(10);
-    ownLay->addWidget(makeField("رمز عبور فعلی *", m_currentPassEdit));
-    ownLay->addWidget(makeField("رمز عبور جدید *", m_newPassEdit));
-    ownLay->addWidget(makeField("تکرار رمز جدید *", m_confirmPassEdit));
+    ownLay->addWidget(makeField("رمز عبور فعلی *", makePasswordWidget(m_currentPassEdit, this)));
+    ownLay->addWidget(makeField("رمز عبور جدید *",  makePasswordWidget(m_newPassEdit,     this)));
+    ownLay->addWidget(makeField("تکرار رمز جدید *", makePasswordWidget(m_confirmPassEdit, this)));
 
+    // Right aligned
     auto* ownBtnRow = new QHBoxLayout;
     ownBtnRow->addStretch();
     ownBtnRow->addWidget(btnChangeOwn);
@@ -102,12 +176,6 @@ void UsersTab::buildAdminView()
     rootLay->addWidget(makeCard("تغییر رمز عبور ادمین", ownLay));
 
     // ── Section 2: Technician account ───────────────────────────────────────
-    m_techUsernameLabel = new QLabel;
-    m_techUsernameLabel->setObjectName("techUsernameLabel");
-    m_techUsernameLabel->setWordWrap(false);
-    m_techUsernameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    loadTechnicianInfo();
-
     m_techNewPassEdit = new QLineEdit;
     m_techNewPassEdit->setEchoMode(QLineEdit::Password);
     m_techNewPassEdit->setPlaceholderText("رمز جدید تکنسین");
@@ -116,29 +184,38 @@ void UsersTab::buildAdminView()
     m_techConfirmEdit->setEchoMode(QLineEdit::Password);
     m_techConfirmEdit->setPlaceholderText("تکرار رمز جدید");
 
+    // Admin must confirm with own password to change tech password
+    m_adminConfirmEdit = new QLineEdit;
+    m_adminConfirmEdit->setEchoMode(QLineEdit::Password);
+    m_adminConfirmEdit->setPlaceholderText("رمز عبور ادمین برای تأیید");
+
     auto* btnResetTech = new QPushButton("تغییر رمز تکنسین");
     btnResetTech->setObjectName("btnPrimary");
 
+    loadTechnicianInfo();
+
     auto* techLay = new QVBoxLayout;
     techLay->setSpacing(10);
-    techLay->addWidget(m_techUsernameLabel);
-    techLay->addWidget(makeField("رمز عبور جدید *", m_techNewPassEdit));
-    techLay->addWidget(makeField("تکرار رمز جدید *", m_techConfirmEdit));
+    techLay->addWidget(makeField("تأیید هویت ادمین *",  makePasswordWidget(m_adminConfirmEdit, this)));
+    techLay->addWidget(makeField("رمز عبور جدید *",      makePasswordWidget(m_techNewPassEdit,  this)));
+    techLay->addWidget(makeField("تکرار رمز جدید *",     makePasswordWidget(m_techConfirmEdit,  this)));
 
+    // Right aligned
     auto* techBtnRow = new QHBoxLayout;
     techBtnRow->addStretch();
     techBtnRow->addWidget(btnResetTech);
     techLay->addLayout(techBtnRow);
 
     rootLay->addWidget(makeCard("مدیریت حساب تکنسین", techLay));
-
     rootLay->addStretch();
 
-    connect(btnChangeOwn, &QPushButton::clicked, this, &UsersTab::onChangeOwnPassword);
-    connect(btnResetTech, &QPushButton::clicked, this, &UsersTab::onResetTechPassword);
+    connect(btnChangeOwn,  &QPushButton::clicked, this, &UsersTab::onChangeOwnPassword);
+    connect(btnResetTech,  &QPushButton::clicked, this, &UsersTab::onResetTechPassword);
 }
 
-// ── Technician view ───────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Technician view
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::buildTechnicianView()
 {
@@ -167,10 +244,11 @@ void UsersTab::buildTechnicianView()
 
     auto* lay = new QVBoxLayout;
     lay->setSpacing(10);
-    lay->addWidget(makeField("رمز عبور فعلی *", m_currentPassEdit));
-    lay->addWidget(makeField("رمز عبور جدید *", m_newPassEdit));
-    lay->addWidget(makeField("تکرار رمز جدید *", m_confirmPassEdit));
+    lay->addWidget(makeField("رمز عبور فعلی *", makePasswordWidget(m_currentPassEdit, this)));
+    lay->addWidget(makeField("رمز عبور جدید *",  makePasswordWidget(m_newPassEdit,     this)));
+    lay->addWidget(makeField("تکرار رمز جدید *", makePasswordWidget(m_confirmPassEdit, this)));
 
+    // Right aligned
     auto* btnRow = new QHBoxLayout;
     btnRow->addStretch();
     btnRow->addWidget(btnChange);
@@ -182,21 +260,22 @@ void UsersTab::buildTechnicianView()
     connect(btnChange, &QPushButton::clicked, this, &UsersTab::onChangeOwnPassword);
 }
 
-// ── Load technician info ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Load technician info
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::loadTechnicianInfo()
 {
     QSqlQuery q;
-    q.prepare("SELECT id, username FROM users WHERE role = 'technician' LIMIT 1");
+    q.prepare("SELECT id FROM users WHERE role='technician' LIMIT 1");
     q.exec();
-    if (q.next()) {
+    if (q.next())
         m_techUserId = q.value("id").toInt();
-        if (m_techUsernameLabel)
-            m_techUsernameLabel->setText("نام کاربری: " + q.value("username").toString());
-    }
 }
 
-// ── Change own password ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Change own password (admin or technician)
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::onChangeOwnPassword()
 {
@@ -205,118 +284,129 @@ void UsersTab::onChangeOwnPassword()
     QString confirm = m_confirmPassEdit->text();
 
     if (current.isEmpty() || newPass.isEmpty() || confirm.isEmpty()) {
-        StyledMessageBox::warning(this, "Error", "Please fill in all fields.");
+        StyledMessageBox::warning(this, "خطا", "لطفاً همه فیلدها را پر کنید.");
         return;
     }
     if (newPass != confirm) {
-        StyledMessageBox::warning(this, "Error", "New passwords do not match.");
+        StyledMessageBox::warning(this, "خطا", "رمز جدید و تکرار آن یکسان نیستند.");
         return;
     }
     if (newPass.length() < 4) {
-        StyledMessageBox::warning(this, "Error", "Password must be at least 4 characters.");
+        StyledMessageBox::warning(this, "خطا", "رمز عبور باید حداقل ۴ کاراکتر باشد.");
         return;
     }
 
     // Verify current password
     QString currentHash = Database::hashPassword(current);
     QSqlQuery check;
-    check.prepare("SELECT id FROM users WHERE id = :id AND password_hash = :hash");
+    check.prepare("SELECT id FROM users WHERE id=:id AND password_hash=:hash");
     check.bindValue(":id",   Session::instance().userId());
     check.bindValue(":hash", currentHash);
     check.exec();
 
     if (!check.next()) {
-        StyledMessageBox::warning(this, "Error", "Current password is incorrect.");
+        StyledMessageBox::warning(this, "خطا", "رمز عبور فعلی اشتباه است.");
         return;
     }
 
-    // Update password
     QString newHash = Database::hashPassword(newPass);
     QSqlQuery q;
-    q.prepare("UPDATE users SET password_hash = :hash, updated_at = NOW() WHERE id = :id");
+    q.prepare("UPDATE users SET password_hash=:hash, updated_at=NOW() WHERE id=:id");
     q.bindValue(":hash", newHash);
     q.bindValue(":id",   Session::instance().userId());
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to update password:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در به‌روزرسانی رمز:\n" + q.lastError().text());
         return;
     }
 
     m_currentPassEdit->clear();
     m_newPassEdit->clear();
     m_confirmPassEdit->clear();
-    StyledMessageBox::success(this, "Success", "Password changed successfully.");
+    StyledMessageBox::success(this, "موفق", "رمز عبور با موفقیت تغییر کرد.");
 }
 
-// ── Reset technician password (admin only) ────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Reset technician password (admin only — requires admin password confirmation)
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::onResetTechPassword()
 {
     if (m_techUserId < 0) {
-        StyledMessageBox::warning(this, "Error", "No technician account found.");
+        StyledMessageBox::warning(this, "خطا", "حساب تکنسین پیدا نشد.");
         return;
     }
 
-    QString newPass = m_techNewPassEdit->text();
-    QString confirm = m_techConfirmEdit->text();
+    QString adminPass = m_adminConfirmEdit ? m_adminConfirmEdit->text() : "";
+    QString newPass   = m_techNewPassEdit->text();
+    QString confirm   = m_techConfirmEdit->text();
 
-    if (newPass.isEmpty() || confirm.isEmpty()) {
-        StyledMessageBox::warning(this, "Error", "Please fill in all fields.");
+    if (adminPass.isEmpty() || newPass.isEmpty() || confirm.isEmpty()) {
+        StyledMessageBox::warning(this, "خطا", "لطفاً همه فیلدها را پر کنید.");
         return;
     }
+
+    // Verify admin password
+    QString adminHash = Database::hashPassword(adminPass);
+    QSqlQuery check;
+    check.prepare(
+        "SELECT id FROM users WHERE id=:id AND password_hash=:hash AND role='admin'");
+    check.bindValue(":id",   Session::instance().userId());
+    check.bindValue(":hash", adminHash);
+    check.exec();
+
+    if (!check.next()) {
+        StyledMessageBox::warning(this, "خطا", "رمز عبور ادمین اشتباه است.");
+        return;
+    }
+
     if (newPass != confirm) {
-        StyledMessageBox::warning(this, "Error", "Passwords do not match.");
+        StyledMessageBox::warning(this, "خطا", "رمز جدید و تکرار آن یکسان نیستند.");
         return;
     }
     if (newPass.length() < 4) {
-        StyledMessageBox::warning(this, "Error", "Password must be at least 4 characters.");
+        StyledMessageBox::warning(this, "خطا", "رمز عبور باید حداقل ۴ کاراکتر باشد.");
         return;
     }
 
     QString newHash = Database::hashPassword(newPass);
     QSqlQuery q;
-    q.prepare("UPDATE users SET password_hash = :hash, updated_at = NOW() WHERE id = :id");
+    q.prepare("UPDATE users SET password_hash=:hash, updated_at=NOW() WHERE id=:id");
     q.bindValue(":hash", newHash);
     q.bindValue(":id",   m_techUserId);
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to reset password:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در بازنشانی رمز:\n" + q.lastError().text());
         return;
     }
 
+    if (m_adminConfirmEdit) m_adminConfirmEdit->clear();
     m_techNewPassEdit->clear();
     m_techConfirmEdit->clear();
-    StyledMessageBox::success(this, "Success", "Technician password reset successfully.");
+    StyledMessageBox::success(this, "موفق", "رمز تکنسین با موفقیت تغییر کرد.");
 }
 
-// ── Style ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Style
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UsersTab::applyStyle()
 {
     setStyleSheet(R"(
         QLabel#pageTitle {
-            font-size: 18px; font-weight: bold; color: #212121;
-            background: transparent;
+            font-size: 18px; font-weight: bold; color: #212121; background: transparent;
         }
         QWidget#settingsCard {
-            background: white;
-            border: 1px solid #E8F5E9;
-            border-radius: 10px;
+            background: white; border: 1px solid #E8F5E9; border-radius: 10px;
         }
         QLabel#cardTitle {
-            font-size: 14px; font-weight: bold; color: #2E7D32;
-            background: transparent;
+            font-size: 14px; font-weight: bold; color: #2E7D32; background: transparent;
         }
         QFrame#cardDivider { color: #E8F5E9; }
         QLabel#fieldLabel {
             font-size: 12px; color: #757575; background: transparent;
-        }
-        QLabel#techUsernameLabel {
-            font-size: 13px; color: #212121; background: #F1F8E9;
-            border-radius: 6px; padding: 8px 12px;
-            border: 1px solid #C8E6C9;
-            min-height: 20px;
-            max-height: 40px;
         }
         QLineEdit {
             border: 1px solid #A5D6A7; border-radius: 6px;

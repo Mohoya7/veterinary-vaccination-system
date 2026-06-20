@@ -4,7 +4,7 @@
 #include <QDialog>
 #include <QSqlQuery>
 #include <QSqlError>
-#include <QMessageBox>
+#include <QAction>
 #include "database.h"
 
 namespace Ui { class LoginDialog; }
@@ -26,12 +26,14 @@ protected:
 
 private slots:
     void onLoginClicked();
+    void onTogglePasswordVisibility();
 
 private:
     Ui::LoginDialog *ui;
     QString m_role;
     int     m_userId   = -1;
     QString m_username;
+    QAction *m_togglePasswordAction = nullptr;
 };
 
 #endif // LOGINDIALOG_H

@@ -5,6 +5,7 @@
 #include "persiandatepicker.h"
 #include "styledmessagebox.h"
 #include "session.h"
+#include "database.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -118,7 +119,8 @@ void VaccinationsWidget::showVaccinationById(int vacId)
         "SELECT v.id, a.name AS animal_name, a.animal_type_id, "
         "at.name AS type_name, at.badge_bg, at.badge_fg, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
-        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
+        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at, "
+        "v.is_renewed "
         "FROM vaccinations v "
         "JOIN animals a        ON v.animal_id        = a.id "
         "JOIN animal_types at  ON a.animal_type_id   = at.id "
@@ -142,14 +144,18 @@ void VaccinationsWidget::showVaccinationById(int vacId)
 
     QDate   vacDate     = q.value("vaccinated_at").toDate();
     QDate   nextDate    = q.value("next_reminder_at").toDate();
+    bool    isRenewed   = q.value("is_renewed").toBool();
     QString badgeBg     = q.value("badge_bg").toString();
     QString badgeFg     = q.value("badge_fg").toString();
     QString typeName    = q.value("type_name").toString();
 
+    // وضعیت واقعی: تمدید شده فقط وقتی واقعاً واکسن جدیدتری ثبت شده باشد،
+    // وگرنه بر اساس تاریخ یادآوری محاسبه می‌شود.
     QString statusText, statusBg, statusFg;
-    if      (nextDate < today)  { statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828"; }
-    else if (nextDate == today) { statusText = "موعد رسیده"; statusBg = "#FFF9C4"; statusFg = "#F57F17"; }
-    else                        { statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32"; }
+    if      (isRenewed)            { statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32"; }
+    else if (nextDate < today)     { statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828"; }
+    else if (nextDate == today)    { statusText = "موعد رسیده"; statusBg = "#FFF9C4"; statusFg = "#F57F17"; }
+    else                           { statusText = "موعد نرسیده"; statusBg = "#E3F2FD"; statusFg = "#1565C0"; }
 
     tbl->setItem(0, 0, makeItem(q.value("animal_name").toString()));
     tbl->setCellWidget(0, 1, makeBadge(typeName, badgeBg, badgeFg));
@@ -352,18 +358,16 @@ void VaccinationsWidget::loadStats()
     if (q.next()) ui->lblTotalCount->setText(q.value(0).toString());
 
     q.prepare(
-        "SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
-        "JOIN reminder_followups rf ON rf.vaccination_id=v.id "
-        "WHERE v.next_reminder_at=:today AND rf.is_resolved=FALSE"
+        "SELECT COUNT(*) FROM vaccinations v "
+        "WHERE v.is_renewed = 0 AND v.next_reminder_at = :today"
         );
     q.bindValue(":today", today);
     q.exec();
     if (q.next()) ui->lblTodayCount->setText(q.value(0).toString());
 
     q.prepare(
-        "SELECT COUNT(DISTINCT v.id) FROM vaccinations v "
-        "JOIN reminder_followups rf ON rf.vaccination_id=v.id "
-        "WHERE v.next_reminder_at < :today AND rf.is_resolved=FALSE"
+        "SELECT COUNT(*) FROM vaccinations v "
+        "WHERE v.is_renewed = 0 AND v.next_reminder_at < :today"
         );
     q.bindValue(":today", today);
     q.exec();
@@ -397,12 +401,15 @@ QString VaccinationsWidget::buildWhereClause() const
         where += "AND v.vaccinated_at BETWEEN :dfrom AND :dto ";
 
     QDate today = QDate::currentDate();
+    // statusIdx: 0=همه, 1=موعد نرسیده, 2=موعد رسیده, 3=تأخیر دارد, 4=تمدید شده
     if (statusIdx == 1)
-        where += QString("AND v.next_reminder_at = '%1' ").arg(today.toString("yyyy-MM-dd"));
+        where += QString("AND v.is_renewed = 0 AND v.next_reminder_at > '%1' ").arg(today.toString("yyyy-MM-dd"));
     else if (statusIdx == 2)
-        where += QString("AND v.next_reminder_at > '%1' ").arg(today.toString("yyyy-MM-dd"));
+        where += QString("AND v.is_renewed = 0 AND v.next_reminder_at = '%1' ").arg(today.toString("yyyy-MM-dd"));
     else if (statusIdx == 3)
-        where += QString("AND v.next_reminder_at < '%1' ").arg(today.toString("yyyy-MM-dd"));
+        where += QString("AND v.is_renewed = 0 AND v.next_reminder_at < '%1' ").arg(today.toString("yyyy-MM-dd"));
+    else if (statusIdx == 4)
+        where += "AND v.is_renewed = 1 ";
 
     return where;
 }
@@ -601,14 +608,15 @@ void VaccinationsWidget::appendRows(int offset)
         "at.name AS type_name, at.badge_bg, at.badge_fg, "
         "o.id AS owner_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
-        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at "
+        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at, "
+        "v.is_renewed, v.vaccine_type_id "
         "FROM vaccinations v "
         "JOIN animals a        ON v.animal_id        = a.id "
         "JOIN animal_types at  ON a.animal_type_id   = at.id "
         "JOIN owners  o        ON a.owner_id          = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id   = vt.id "
         + buildWhereClause()
-        + "ORDER BY v.vaccinated_at DESC "
+        + "ORDER BY v.vaccinated_at DESC, a.name ASC "
           "LIMIT :limit OFFSET :offset";
 
     QSqlQuery q;
@@ -635,6 +643,7 @@ void VaccinationsWidget::appendRows(int offset)
         int     vacId       = q.value("id").toInt();
         int     animalId    = q.value("animal_id").toInt();
         int     ownerId     = q.value("owner_id").toInt();
+        int     vaccineTypeId = q.value("vaccine_type_id").toInt();
         QString animalName  = q.value("animal_name").toString();
         QString fileNumber  = q.value("file_number").toString();
         QString typeName    = q.value("type_name").toString();
@@ -645,14 +654,19 @@ void VaccinationsWidget::appendRows(int offset)
         QString vaccineName = q.value("vaccine_name").toString();
         QDate   vacDate     = q.value("vaccinated_at").toDate();
         QDate   nextDate    = q.value("next_reminder_at").toDate();
+        bool    isRenewed   = q.value("is_renewed").toBool();
 
+        // وضعیت واقعی: تمدید شده فقط وقتی واقعاً واکسن جدیدتری ثبت شده
+        // باشد (is_renewed=1)، وگرنه بر اساس تاریخ یادآوری محاسبه می‌شود.
         QString statusText, statusBg, statusFg;
-        if (nextDate < today) {
-            statusText = "تأخیر دارد"; statusBg = "#FFEBEE"; statusFg = "#C62828";
+        if (isRenewed) {
+            statusText = "تمدید شده";   statusBg = "#E8F5E9"; statusFg = "#2E7D32";
+        } else if (nextDate < today) {
+            statusText = "تأخیر دارد";  statusBg = "#FFEBEE"; statusFg = "#C62828";
         } else if (nextDate == today) {
-            statusText = "موعد رسیده"; statusBg = "#FFF9C4"; statusFg = "#F57F17";
+            statusText = "موعد رسیده";  statusBg = "#FFF9C4"; statusFg = "#F57F17";
         } else {
-            statusText = "تمدید شده";  statusBg = "#E8F5E9"; statusFg = "#2E7D32";
+            statusText = "موعد نرسیده"; statusBg = "#E3F2FD"; statusFg = "#1565C0";
         }
 
         int row = startRow + (fetched - 1);
@@ -862,12 +876,28 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
                     "آیا مطمئن هستید که می‌خواهید این واکسن را حذف کنید؟"))
                 return;
 
-            QSqlQuery q;
-            q.prepare("UPDATE reminder_followups SET is_resolved=TRUE WHERE vaccination_id=:id");
-            q.bindValue(":id", vaccinationId); q.exec();
+            // قبل از حذف، animal_id/vaccine_type_id/is_renewed را می‌خوانیم
+            // چون بعد از DELETE دیگر در دسترس نیستند و onVaccinationDeleted
+            // به این مقادیر نیاز دارد.
+            QSqlQuery infoQ;
+            infoQ.prepare(
+                "SELECT animal_id, vaccine_type_id, is_renewed "
+                "FROM vaccinations WHERE id=:id");
+            infoQ.bindValue(":id", vaccinationId);
+            infoQ.exec();
+            if (!infoQ.next()) return;
+            int  animalId      = infoQ.value("animal_id").toInt();
+            int  vaccineTypeId = infoQ.value("vaccine_type_id").toInt();
+            bool wasRenewed    = infoQ.value("is_renewed").toBool();
 
-            q.prepare("DELETE FROM vaccinations WHERE id=:id");
-            q.bindValue(":id", vaccinationId); q.exec();
+            QSqlQuery delQ;
+            delQ.prepare("DELETE FROM vaccinations WHERE id=:id");
+            delQ.bindValue(":id", vaccinationId);
+            if (!delQ.exec()) return;
+
+            // reminder_followups مرتبط با ON DELETE CASCADE خودکار حذف می‌شود.
+            // حالا باید زنجیره‌ی is_renewed این گروه را به‌روزرسانی کنیم.
+            Database::onVaccinationDeleted(animalId, vaccineTypeId, wasRenewed);
 
             loadData();
         });

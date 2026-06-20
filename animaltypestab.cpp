@@ -13,9 +13,10 @@
 #include <QColorDialog>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QRegularExpressionValidator>
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AddAnimalTypeDialog — inline dialog for add/edit animal type
+// AddAnimalTypeDialog
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AddAnimalTypeDialog : public QDialog
@@ -24,9 +25,9 @@ public:
     explicit AddAnimalTypeDialog(QWidget* parent = nullptr, int typeId = -1)
         : QDialog(parent), m_typeId(typeId)
     {
-        setWindowTitle(typeId < 0 ? "Add Animal Type" : "Edit Animal Type");
+        setWindowTitle(typeId < 0 ? "افزودن نوع حیوان" : "ویرایش نوع حیوان");
         setLayoutDirection(Qt::RightToLeft);
-        setFixedWidth(360);
+        setFixedWidth(380);
 
         auto* vlay = new QVBoxLayout(this);
         vlay->setContentsMargins(0, 0, 0, 0);
@@ -50,39 +51,62 @@ public:
         bodyLay->setContentsMargins(20, 20, 20, 16);
         bodyLay->setSpacing(14);
 
+        QString fieldStyle =
+            "QLineEdit{border:1px solid #A5D6A7;border-radius:6px;"
+            "padding:7px 10px;font-size:13px;background:#F9FBF9;"
+            "color:#212121;min-height:36px;}"
+            "QLineEdit:focus{border-color:#2E7D32;background:white;}";
+
         // Name
         m_nameEdit = new QLineEdit;
         m_nameEdit->setPlaceholderText("مثال: سگ");
+        m_nameEdit->setStyleSheet(fieldStyle);
         addField(bodyLay, "نام نوع حیوان *", m_nameEdit);
 
-        // Emoji
+        // Emoji — single emoji only
         m_emojiEdit = new QLineEdit;
         m_emojiEdit->setPlaceholderText("مثال: 🐕");
         m_emojiEdit->setMaxLength(2);
+        m_emojiEdit->setStyleSheet(fieldStyle);
         addField(bodyLay, "ایموجی", m_emojiEdit);
 
-        // Badge preview
-        auto* previewRow = new QHBoxLayout;
-        previewRow->setSpacing(10);
+        // Badge color row
+        auto* colorLbl = new QLabel("رنگ بج *");
+        colorLbl->setStyleSheet("font-size:12px;color:#757575;background:transparent;");
+        bodyLay->addWidget(colorLbl);
+
+        auto* colorRow = new QHBoxLayout;
+        colorRow->setSpacing(8);
 
         auto* bgBtn = new QPushButton("رنگ پس‌زمینه");
-        bgBtn->setObjectName("colorBtn");
         auto* fgBtn = new QPushButton("رنگ متن");
-        fgBtn->setObjectName("colorBtn");
-        m_previewLabel = new QLabel("نمونه");
-        m_previewLabel->setAlignment(Qt::AlignCenter);
-        m_previewLabel->setFixedSize(60, 28);
+        QString colorBtnStyle =
+            "QPushButton{border:1px solid #A5D6A7;border-radius:6px;"
+            "padding:6px 12px;font-size:12px;background:#F9FBF9;color:#212121;}"
+            "QPushButton:hover{background:#E8F5E9;}";
+        bgBtn->setStyleSheet(colorBtnStyle);
+        fgBtn->setStyleSheet(colorBtnStyle);
 
-        previewRow->addWidget(bgBtn);
-        previewRow->addWidget(fgBtn);
-        previewRow->addStretch();
-        previewRow->addWidget(m_previewLabel);
+        colorRow->addWidget(bgBtn);
+        colorRow->addWidget(fgBtn);
+        colorRow->addStretch();
 
-        auto* colorLbl = new QLabel("رنگ بج *");
-        colorLbl->setStyleSheet("font-size:12px;color:#757575;");
-        bodyLay->addWidget(colorLbl);
-        bodyLay->addLayout(previewRow);
+        // Badge preview
+        m_badgePreview = new QLabel;
+        m_badgePreview->setAlignment(Qt::AlignCenter);
+        m_badgePreview->setFixedSize(52, 28);
+        colorRow->addWidget(m_badgePreview);
 
+        // Emoji preview — separate, bigger
+        m_emojiPreview = new QLabel;
+        m_emojiPreview->setAlignment(Qt::AlignCenter);
+        m_emojiPreview->setFixedSize(36, 36);
+        m_emojiPreview->setStyleSheet(
+            "font-size:22px;background:#F1F8E9;border-radius:6px;"
+            "border:1px solid #C8E6C9;");
+        colorRow->addWidget(m_emojiPreview);
+
+        bodyLay->addLayout(colorRow);
         vlay->addWidget(body);
 
         // Footer
@@ -111,25 +135,10 @@ public:
         footerLay->addWidget(btnSave);
         vlay->addWidget(footer);
 
-        // Color buttons style
-        QString colorBtnStyle =
-            "QPushButton#colorBtn{border:1px solid #A5D6A7;border-radius:6px;"
-            "padding:6px 12px;font-size:12px;background:#F9FBF9;}"
-            "QPushButton#colorBtn:hover{background:#E8F5E9;}";
-        bgBtn->setStyleSheet(colorBtnStyle);
-        fgBtn->setStyleSheet(colorBtnStyle);
-
-        m_nameEdit->setStyleSheet(
-            "QLineEdit{border:1px solid #A5D6A7;border-radius:6px;"
-            "padding:7px 10px;font-size:13px;background:#F9FBF9;"
-            "color:#212121;min-height:36px;}"
-            "QLineEdit:focus{border-color:#2E7D32;background:white;}");
-        m_emojiEdit->setStyleSheet(m_nameEdit->styleSheet());
-
-        // Load existing if edit mode
+        // Load existing or defaults
         if (typeId >= 0) {
             QSqlQuery q;
-            q.prepare("SELECT name, emoji, badge_bg, badge_fg FROM animal_types WHERE id = :id");
+            q.prepare("SELECT name, emoji, badge_bg, badge_fg FROM animal_types WHERE id=:id");
             q.bindValue(":id", typeId);
             q.exec();
             if (q.next()) {
@@ -137,20 +146,24 @@ public:
                 m_emojiEdit->setText(q.value("emoji").toString());
                 m_bgColor = QColor(q.value("badge_bg").toString());
                 m_fgColor = QColor(q.value("badge_fg").toString());
-                updatePreview();
             }
         } else {
             m_bgColor = QColor("#E8F5E9");
             m_fgColor = QColor("#1B5E20");
-            updatePreview();
         }
+        updatePreview();
+
+        connect(m_emojiEdit, &QLineEdit::textChanged, this,
+                [this](const QString&) { updatePreview(); });
+        connect(m_nameEdit, &QLineEdit::textChanged, this,
+                [this](const QString&) { updatePreview(); });
 
         connect(bgBtn, &QPushButton::clicked, this, [this]() {
-            QColor c = QColorDialog::getColor(m_bgColor, this, "Badge Background Color");
+            QColor c = QColorDialog::getColor(m_bgColor, this, "رنگ پس‌زمینه بج");
             if (c.isValid()) { m_bgColor = c; updatePreview(); }
         });
         connect(fgBtn, &QPushButton::clicked, this, [this]() {
-            QColor c = QColorDialog::getColor(m_fgColor, this, "Badge Text Color");
+            QColor c = QColorDialog::getColor(m_fgColor, this, "رنگ متن بج");
             if (c.isValid()) { m_fgColor = c; updatePreview(); }
         });
         connect(btnSave,   &QPushButton::clicked, this, &AddAnimalTypeDialog::onSave);
@@ -171,34 +184,41 @@ private:
     }
 
     void updatePreview() {
-        QString txt = m_emojiEdit->text().isEmpty()
-        ? (m_nameEdit->text().isEmpty() ? "نمونه" : m_nameEdit->text())
-        : m_emojiEdit->text();
-        m_previewLabel->setText(txt);
-        m_previewLabel->setStyleSheet(QString(
+        // Badge preview — shows name text with badge colors
+        QString badgeText = m_nameEdit->text().isEmpty() ? "نمونه" : m_nameEdit->text();
+        m_badgePreview->setText(badgeText);
+        m_badgePreview->setStyleSheet(QString(
                                           "background:%1;color:%2;border-radius:4px;"
-                                          "font-size:12px;padding:2px 8px;")
+                                          "font-size:11px;font-weight:500;padding:2px 6px;")
                                           .arg(m_bgColor.name(), m_fgColor.name()));
+
+        // Emoji preview — shows emoji separately
+        QString emojiText = m_emojiEdit->text().trimmed();
+        if (emojiText.isEmpty())
+            m_emojiPreview->setText("—");
+        else
+            m_emojiPreview->setText(emojiText);
     }
 
     void onSave() {
         if (m_nameEdit->text().trimmed().isEmpty()) {
-            StyledMessageBox::warning(this, "Error", "Please enter the animal type name.");
+            StyledMessageBox::warning(this, "خطا", "لطفاً نام نوع حیوان را وارد کنید.");
             return;
         }
         accept();
     }
 
-    int        m_typeId = -1;
-    QLineEdit* m_nameEdit  = nullptr;
-    QLineEdit* m_emojiEdit = nullptr;
-    QLabel*    m_previewLabel = nullptr;
+    int        m_typeId       = -1;
+    QLineEdit* m_nameEdit     = nullptr;
+    QLineEdit* m_emojiEdit    = nullptr;
+    QLabel*    m_badgePreview = nullptr;
+    QLabel*    m_emojiPreview = nullptr;
     QColor     m_bgColor;
     QColor     m_fgColor;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AddVaccineTypeDialog — inline dialog for add/edit vaccine type
+// AddVaccineTypeDialog
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AddVaccineTypeDialog : public QDialog
@@ -207,7 +227,7 @@ public:
     explicit AddVaccineTypeDialog(QWidget* parent = nullptr, int vaccineId = -1)
         : QDialog(parent), m_vaccineId(vaccineId)
     {
-        setWindowTitle(vaccineId < 0 ? "Add Vaccine Type" : "Edit Vaccine Type");
+        setWindowTitle(vaccineId < 0 ? "افزودن نوع واکسن" : "ویرایش نوع واکسن");
         setLayoutDirection(Qt::RightToLeft);
         setFixedWidth(340);
 
@@ -233,21 +253,22 @@ public:
         bodyLay->setContentsMargins(20, 20, 20, 16);
         bodyLay->setSpacing(14);
 
-        m_nameEdit = new QLineEdit;
-        m_nameEdit->setPlaceholderText("مثال: واکسن هاری");
-
-        m_reminderSpin = new QSpinBox;
-        m_reminderSpin->setRange(1, 3650);
-        m_reminderSpin->setValue(365);
-        m_reminderSpin->setSuffix(" روز");
-
         QString fieldStyle =
             "QLineEdit,QSpinBox{border:1px solid #A5D6A7;border-radius:6px;"
             "padding:7px 10px;font-size:13px;background:#F9FBF9;"
             "color:#212121;min-height:36px;}"
             "QLineEdit:focus,QSpinBox:focus{border-color:#2E7D32;background:white;}"
             "QSpinBox::up-button,QSpinBox::down-button{border:none;width:20px;background:transparent;}";
+
+        m_nameEdit = new QLineEdit;
+        m_nameEdit->setPlaceholderText("مثال: واکسن هاری");
         m_nameEdit->setStyleSheet(fieldStyle);
+
+        // Reminder days — numbers only, label shows (بر حسب روز)
+        m_reminderSpin = new QSpinBox;
+        m_reminderSpin->setRange(1, 3650);
+        m_reminderSpin->setValue(365);
+        // No suffix — just plain number, label explains the unit
         m_reminderSpin->setStyleSheet(fieldStyle);
 
         auto addLblField = [&](const QString& lbl, QWidget* w) {
@@ -256,8 +277,9 @@ public:
             bodyLay->addWidget(l);
             bodyLay->addWidget(w);
         };
+
         addLblField("نام واکسن *", m_nameEdit);
-        addLblField("دوره یادآوری پیش‌فرض *", m_reminderSpin);
+        addLblField("دوره یادآوری پیش‌فرض * (بر حسب روز)", m_reminderSpin);
 
         vlay->addWidget(body);
 
@@ -287,10 +309,9 @@ public:
         footerLay->addWidget(btnSave);
         vlay->addWidget(footer);
 
-        // Load existing if edit mode
         if (vaccineId >= 0) {
             QSqlQuery q;
-            q.prepare("SELECT name, default_reminder_days FROM vaccine_types WHERE id = :id");
+            q.prepare("SELECT name, default_reminder_days FROM vaccine_types WHERE id=:id");
             q.bindValue(":id", vaccineId);
             q.exec();
             if (q.next()) {
@@ -299,9 +320,9 @@ public:
             }
         }
 
-        connect(btnSave,   &QPushButton::clicked, this, [this]() {
+        connect(btnSave, &QPushButton::clicked, this, [this]() {
             if (m_nameEdit->text().trimmed().isEmpty()) {
-                StyledMessageBox::warning(this, "Error", "Please enter the vaccine name.");
+                StyledMessageBox::warning(this, "خطا", "لطفاً نام واکسن را وارد کنید.");
                 return;
             }
             accept();
@@ -335,11 +356,10 @@ AnimalTypesTab::AnimalTypesTab(QWidget* parent)
     pageTitle->setObjectName("pageTitle");
     rootLay->addWidget(pageTitle);
 
-    // Main horizontal split
     auto* splitLay = new QHBoxLayout;
     splitLay->setSpacing(16);
 
-    // ── Left: Animal types list ───────────────────────────────────────────────
+    // ── Left: Animal types ────────────────────────────────────────────────────
     auto* leftCard = new QWidget;
     leftCard->setObjectName("settingsCard");
     leftCard->setMinimumWidth(200);
@@ -361,7 +381,6 @@ AnimalTypesTab::AnimalTypesTab(QWidget* parent)
     m_animalTypeList->setObjectName("typeList");
     leftLay->addWidget(m_animalTypeList, 1);
 
-    // Admin-only buttons
     if (Session::instance().isAdmin()) {
         auto* btnRow = new QHBoxLayout;
         m_btnAddType    = new QPushButton("+ افزودن");
@@ -380,7 +399,7 @@ AnimalTypesTab::AnimalTypesTab(QWidget* parent)
 
     splitLay->addWidget(leftCard);
 
-    // ── Right: Vaccine types detail ───────────────────────────────────────────
+    // ── Right: Vaccine types ──────────────────────────────────────────────────
     m_detailPanel = new QWidget;
     m_detailPanel->setObjectName("settingsCard");
     auto* rightLay = new QVBoxLayout(m_detailPanel);
@@ -426,7 +445,6 @@ AnimalTypesTab::AnimalTypesTab(QWidget* parent)
     splitLay->addWidget(m_detailPanel, 1);
     rootLay->addLayout(splitLay, 1);
 
-    // ── Connections ───────────────────────────────────────────────────────────
     connect(m_animalTypeList, &QListWidget::currentRowChanged,
             this, &AnimalTypesTab::onAnimalTypeSelected);
 
@@ -442,10 +460,9 @@ AnimalTypesTab::AnimalTypesTab(QWidget* parent)
             bool valid = (row >= 0);
             m_btnEditVaccine->setEnabled(valid);
             m_btnDeleteVaccine->setEnabled(valid);
-            if (valid)
-                m_selectedVaccineTypeId = m_vaccineList->currentItem()->data(Qt::UserRole).toInt();
-            else
-                m_selectedVaccineTypeId = -1;
+            m_selectedVaccineTypeId = valid
+                                          ? m_vaccineList->currentItem()->data(Qt::UserRole).toInt()
+                                          : -1;
         });
     }
 
@@ -474,8 +491,7 @@ void AnimalTypesTab::loadVaccineTypes(int animalTypeId)
         "SELECT vt.id, vt.name, vt.default_reminder_days "
         "FROM vaccine_types vt "
         "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
-        "WHERE vta.animal_type_id = :atid "
-        "ORDER BY vt.name");
+        "WHERE vta.animal_type_id = :atid ORDER BY vt.name");
     q.bindValue(":atid", animalTypeId);
     q.exec();
     while (q.next()) {
@@ -491,13 +507,11 @@ void AnimalTypesTab::onAnimalTypeSelected(int row)
 {
     if (row < 0) { clearDetail(); return; }
 
-    m_selectedAnimalTypeId = m_animalTypeList->item(row)->data(Qt::UserRole).toInt();
+    m_selectedAnimalTypeId  = m_animalTypeList->item(row)->data(Qt::UserRole).toInt();
     m_selectedVaccineTypeId = -1;
 
-    // Show vaccine list, hide hint
     if (m_vaccineList) {
         m_vaccineList->show();
-        // hide hint label
         auto* hint = m_detailPanel->findChild<QLabel*>("hintLabel");
         if (hint) hint->hide();
     }
@@ -541,13 +555,14 @@ void AnimalTypesTab::onAddAnimalType()
     q.bindValue(":fg",    dlg.badgeFg());
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to add animal type:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در افزودن نوع حیوان:\n" + q.lastError().text());
         return;
     }
 
     AnimalTypeInfo::clearCache();
     loadAnimalTypes();
-    StyledMessageBox::success(this, "Success", "Animal type added successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت اضافه شد.");
 }
 
 void AnimalTypesTab::onEditAnimalType()
@@ -567,30 +582,29 @@ void AnimalTypesTab::onEditAnimalType()
     q.bindValue(":id",    m_selectedAnimalTypeId);
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to update animal type:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در ویرایش نوع حیوان:\n" + q.lastError().text());
         return;
     }
 
     AnimalTypeInfo::clearCache();
     loadAnimalTypes();
-    StyledMessageBox::success(this, "Success", "Animal type updated successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت ویرایش شد.");
 }
 
 void AnimalTypesTab::onDeleteAnimalType()
 {
     if (m_selectedAnimalTypeId < 0) return;
 
-    // Count affected records
     QSqlQuery count;
     count.prepare(
         "SELECT COUNT(*) as animal_count, "
-        "(SELECT COUNT(*) FROM vaccinations v JOIN animals a ON v.animal_id = a.id "
-        " WHERE a.animal_type_id = :id) as vacc_count "
-        "FROM animals WHERE animal_type_id = :id2");
+        "(SELECT COUNT(*) FROM vaccinations v JOIN animals a ON v.animal_id=a.id "
+        " WHERE a.animal_type_id=:id) as vacc_count "
+        "FROM animals WHERE animal_type_id=:id2");
     count.bindValue(":id",  m_selectedAnimalTypeId);
     count.bindValue(":id2", m_selectedAnimalTypeId);
-    count.exec();
-    count.next();
+    count.exec(); count.next();
 
     int animalCount = count.value("animal_count").toInt();
     int vaccCount   = count.value("vacc_count").toInt();
@@ -605,18 +619,18 @@ void AnimalTypesTab::onDeleteAnimalType()
     if (!StyledMessageBox::question(this, "هشدار حذف", msg)) return;
 
     QSqlQuery q;
-    q.prepare("DELETE FROM animal_types WHERE id = :id");
+    q.prepare("DELETE FROM animal_types WHERE id=:id");
     q.bindValue(":id", m_selectedAnimalTypeId);
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to delete:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا", "خطا در حذف:\n" + q.lastError().text());
         return;
     }
 
     AnimalTypeInfo::clearCache();
     clearDetail();
     loadAnimalTypes();
-    StyledMessageBox::success(this, "Success", "Animal type deleted successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت حذف شد.");
 }
 
 void AnimalTypesTab::onAddVaccineType()
@@ -627,19 +641,17 @@ void AnimalTypesTab::onAddVaccineType()
     if (dlg.exec() != QDialog::Accepted) return;
 
     QSqlQuery q;
-    q.prepare("INSERT INTO vaccine_types (name, default_reminder_days) "
-              "VALUES (:name, :days)");
+    q.prepare("INSERT INTO vaccine_types (name, default_reminder_days) VALUES (:name, :days)");
     q.bindValue(":name", dlg.name());
     q.bindValue(":days", dlg.reminderDays());
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to add vaccine type:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در افزودن نوع واکسن:\n" + q.lastError().text());
         return;
     }
 
     int newVaccineId = q.lastInsertId().toInt();
-
-    // Link to this animal type
     QSqlQuery link;
     link.prepare("INSERT INTO vaccine_type_animals (vaccine_type_id, animal_type_id) "
                  "VALUES (:vid, :atid)");
@@ -648,7 +660,7 @@ void AnimalTypesTab::onAddVaccineType()
     link.exec();
 
     loadVaccineTypes(m_selectedAnimalTypeId);
-    StyledMessageBox::success(this, "Success", "Vaccine type added successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت اضافه شد.");
 }
 
 void AnimalTypesTab::onEditVaccineType()
@@ -665,24 +677,23 @@ void AnimalTypesTab::onEditVaccineType()
     q.bindValue(":id",   m_selectedVaccineTypeId);
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to update vaccine type:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا",
+                                "خطا در ویرایش نوع واکسن:\n" + q.lastError().text());
         return;
     }
 
     loadVaccineTypes(m_selectedAnimalTypeId);
-    StyledMessageBox::success(this, "Success", "Vaccine type updated successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت ویرایش شد.");
 }
 
 void AnimalTypesTab::onDeleteVaccineType()
 {
     if (m_selectedVaccineTypeId < 0) return;
 
-    // Count affected vaccinations
     QSqlQuery count;
-    count.prepare("SELECT COUNT(*) FROM vaccinations WHERE vaccine_type_id = :id");
+    count.prepare("SELECT COUNT(*) FROM vaccinations WHERE vaccine_type_id=:id");
     count.bindValue(":id", m_selectedVaccineTypeId);
-    count.exec();
-    count.next();
+    count.exec(); count.next();
     int vaccCount = count.value(0).toInt();
 
     QString msg = QString(
@@ -694,17 +705,17 @@ void AnimalTypesTab::onDeleteVaccineType()
     if (!StyledMessageBox::question(this, "هشدار حذف", msg)) return;
 
     QSqlQuery q;
-    q.prepare("DELETE FROM vaccine_types WHERE id = :id");
+    q.prepare("DELETE FROM vaccine_types WHERE id=:id");
     q.bindValue(":id", m_selectedVaccineTypeId);
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Failed to delete:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا", "خطا در حذف:\n" + q.lastError().text());
         return;
     }
 
     m_selectedVaccineTypeId = -1;
     loadVaccineTypes(m_selectedAnimalTypeId);
-    StyledMessageBox::success(this, "Success", "Vaccine type deleted successfully.");
+    StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت حذف شد.");
 }
 
 void AnimalTypesTab::applyStyle()
@@ -727,31 +738,27 @@ void AnimalTypesTab::applyStyle()
         QListWidget#typeList::item {
             padding: 8px 10px; border-radius: 6px; color: #212121;
         }
-        QListWidget#typeList::item:selected {
-            background: #E8F5E9; color: #2E7D32;
-        }
-        QListWidget#typeList::item:hover {
-            background: #F1F8E9;
-        }
+        QListWidget#typeList::item:selected { background: #E8F5E9; color: #2E7D32; }
+        QListWidget#typeList::item:hover    { background: #F1F8E9; }
         QPushButton#btnSmallPrimary {
             background: #2E7D32; color: white; border: none;
             border-radius: 5px; padding: 5px 10px; font-size: 12px;
         }
-        QPushButton#btnSmallPrimary:hover { background: #1B5E20; }
+        QPushButton#btnSmallPrimary:hover    { background: #1B5E20; }
         QPushButton#btnSmallPrimary:disabled { background: #A5D6A7; }
         QPushButton#btnSmallSecondary {
             background: white; color: #2E7D32;
             border: 1px solid #A5D6A7; border-radius: 5px;
             padding: 5px 10px; font-size: 12px;
         }
-        QPushButton#btnSmallSecondary:hover { background: #F1F8E9; }
+        QPushButton#btnSmallSecondary:hover    { background: #F1F8E9; }
         QPushButton#btnSmallSecondary:disabled { color: #BDBDBD; border-color: #E0E0E0; }
         QPushButton#btnSmallDanger {
             background: white; color: #C62828;
             border: 1px solid #FFCDD2; border-radius: 5px;
             padding: 5px 10px; font-size: 12px;
         }
-        QPushButton#btnSmallDanger:hover { background: #FFEBEE; }
+        QPushButton#btnSmallDanger:hover    { background: #FFEBEE; }
         QPushButton#btnSmallDanger:disabled { color: #BDBDBD; border-color: #E0E0E0; }
     )");
 }

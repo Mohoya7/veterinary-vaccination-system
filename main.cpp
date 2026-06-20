@@ -11,6 +11,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     a.setLayoutDirection(Qt::RightToLeft);
+    a.setWindowIcon(QIcon(":/icons/app.png"));
 
     if (!Database::instance().connect("localhost", "veterinary", "root", "1234")) {
         QMessageBox::critical(nullptr, "خطا", "اتصال به دیتابیس برقرار نشد.");

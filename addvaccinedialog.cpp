@@ -2,6 +2,7 @@
 #include "ui_addvaccinedialog.h"
 #include "persiandatepicker.h"
 #include "styledmessagebox.h"
+#include "database.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QMessageBox>
@@ -13,7 +14,7 @@ AddVaccineDialog::AddVaccineDialog(int animalId, QWidget *parent)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("Add Vaccine");
+    setWindowTitle("افزودن واکسن");
 
     QSqlQuery q;
     q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
@@ -51,9 +52,9 @@ AddVaccineDialog::AddVaccineDialog(int animalId, int vaccinationId, QWidget *par
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
-    setWindowTitle("Edit Vaccine");
-    ui->dialogTitle->setText("Edit Vaccine");
-    ui->btnSave->setText("Save Changes");
+    setWindowTitle("ویرایش واکسن");
+    ui->dialogTitle->setText("ویرایش واکسن");
+    ui->btnSave->setText("ذخیره تغییرات");
 
     QSqlQuery q;
     q.prepare("SELECT a.name, at.id AS type_id, at.name AS type_name, "
@@ -131,6 +132,7 @@ void AddVaccineDialog::loadExistingData(int vaccinationId)
         m_datePicker->setDate(vacDate);
 
     int typeId = q.value("vaccine_type_id").toInt();
+    m_oldVaccineTypeId = typeId; // برای استفاده در onVaccinationEdited بعد از ذخیره
     for (int i = 0; i < ui->vaccineTypeCombo->count(); i++) {
         if (ui->vaccineTypeCombo->itemData(i).toInt() == typeId) {
             ui->vaccineTypeCombo->setCurrentIndex(i);
@@ -220,7 +222,7 @@ void AddVaccineDialog::applyStyle()
 void AddVaccineDialog::onSaveClicked()
 {
     if (ui->vaccineTypeCombo->count() == 0) {
-        StyledMessageBox::warning(this, "Error", "No vaccine type available.");
+        StyledMessageBox::warning(this, "خطا", "هیچ نوع واکسنی موجود نیست.");
         return;
     }
 
@@ -228,16 +230,27 @@ void AddVaccineDialog::onSaveClicked()
     QDate vaccinatedAt  = m_datePicker->date();
 
     if (!vaccinatedAt.isValid()) {
-        StyledMessageBox::warning(this, "Error", "Please select the vaccination date.");
+        StyledMessageBox::warning(this, "خطا", "لطفاً تاریخ تزریق را انتخاب کنید.");
         return;
     }
     if (vaccinatedAt > QDate::currentDate()) {
-        StyledMessageBox::warning(this, "Error", "Vaccination date cannot be in the future.");
+        StyledMessageBox::warning(this, "خطا", "تاریخ تزریق نمی‌تواند در آینده باشد.");
         return;
     }
 
     int   reminderDays = ui->reminderDaysSpin->value();
     QDate nextReminder = vaccinatedAt.addDays(reminderDays);
+
+    // ── محدودیت یکتایی: همان حیوان + همان نوع واکسن نباید دو بار در
+    // یک روز ثبت شود. در حالت ویرایش، خود رکورد فعلی از این چک مستثنا
+    // می‌شود (excludeVacId) تا با خودش تداخل پیدا نکند.
+    int excludeId = (m_vaccinationId < 0) ? -1 : m_vaccinationId;
+    if (Database::vaccinationDateConflictExists(
+            m_animalId, vaccineTypeId, vaccinatedAt.toString("yyyy-MM-dd"), excludeId)) {
+        StyledMessageBox::warning(this, "خطا",
+                                  "واکسنی از این نوع قبلاً برای این حیوان در همین تاریخ ثبت شده است.");
+        return;
+    }
 
     QSqlQuery q;
 
@@ -261,26 +274,27 @@ void AddVaccineDialog::onSaveClicked()
     q.bindValue(":notes", ui->notesEdit->text().trimmed());
 
     if (!q.exec()) {
-        StyledMessageBox::error(this, "Error", "Error registering vaccine:\n" + q.lastError().text());
+        StyledMessageBox::error(this, "خطا", "خطا در ثبت واکسن:\n" + q.lastError().text());
         return;
     }
 
-    // In add mode: resolve any open reminders for the same animal + vaccine type
     if (m_vaccinationId < 0) {
+        // ── Add state: New vaccine registered ─
+        // The new record itself is created with the default is_renewed=0 (database column).
+        // It only needs to convert the previous boundary (if it existed) to is_renewed=1
+        // and resolve its corresponding reminder.
         int newVacId = q.lastInsertId().toInt();
-        QSqlQuery resolveQ;
-        resolveQ.prepare(
-            "UPDATE reminder_followups rf "
-            "JOIN vaccinations v ON rf.vaccination_id = v.id "
-            "SET rf.is_resolved = TRUE, rf.followed_up_at = NOW() "
-            "WHERE v.animal_id = :animal_id "
-            "  AND v.vaccine_type_id = :vtype_id "
-            "  AND v.id != :new_id "
-            "  AND rf.is_resolved = FALSE");
-        resolveQ.bindValue(":animal_id", m_animalId);
-        resolveQ.bindValue(":vtype_id",  vaccineTypeId);
-        resolveQ.bindValue(":new_id",    newVacId);
-        resolveQ.exec();
+        Database::onVaccinationAdded(m_animalId, vaccineTypeId, newVacId);
+
+    } else {
+        // ── Edit mode: Existing vaccine edited ─
+        // animal_id never changes in this dialog (always m_animalId),
+        // but vaccine_type_id may have changed. m_oldVaccineTypeId
+        // It was filled in before this UPDATE in loadExistingData.
+        Database::onVaccinationEdited(
+            m_vaccinationId,
+            m_animalId, m_oldVaccineTypeId,
+            m_animalId, vaccineTypeId);
     }
 
     accept();

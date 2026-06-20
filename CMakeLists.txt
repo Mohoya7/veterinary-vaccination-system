@@ -30,6 +30,7 @@ qt_add_executable(VetProject
     animaltypestab.h animaltypestab.cpp
     backuptab.h backuptab.cpp
     abouttab.h abouttab.cpp
+    app.rc
 
 
 )
@@ -43,7 +44,13 @@ qt_add_resources(VetProject "resources"
         icons/settings.svg
         icons/syringe.svg
         icons/users.svg
-	icons/chevron-down.svg
+        icons/chevron-down.svg
+        icons/app.png
+        icons/login_logo.png
+	icons/eye.svg
+	icons/eye-off.svg
+
+
 )
 target_include_directories(VetProject PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

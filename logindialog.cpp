@@ -4,6 +4,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QtMath>
+#include <QRegularExpressionValidator>
 
 LoginDialog::LoginDialog(QWidget *parent)
     : QDialog(parent)
@@ -11,44 +12,34 @@ LoginDialog::LoginDialog(QWidget *parent)
 {
     ui->setupUi(this);
     setLayoutDirection(Qt::RightToLeft);
+    setWindowFlags(Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);
     ui->headerLayout->setAlignment(ui->logoLabel, Qt::AlignHCenter);
 
-    QPixmap pixmap(90, 90);
-    pixmap.fill(Qt::transparent);
-    QPainter iconPainter(&pixmap);
-    iconPainter.setRenderHint(QPainter::Antialiasing);
-
-    iconPainter.setPen(QPen(QColor(255, 255, 255, 60), 2));
-    iconPainter.setBrush(QColor(255, 255, 255, 50));
-    iconPainter.drawEllipse(2, 2, 86, 86);
-
-    iconPainter.setPen(Qt::NoPen);
-    iconPainter.setBrush(QColor(255, 255, 255, 210));
-    iconPainter.drawEllipse(18, 52, 54, 34);
-    iconPainter.drawEllipse(20, 28, 50, 42);
-
-    QPolygonF earLeft;
-    earLeft << QPointF(22, 40) << QPointF(17, 18) << QPointF(35, 32);
-    iconPainter.drawPolygon(earLeft);
-
-    QPolygonF earRight;
-    earRight << QPointF(68, 40) << QPointF(73, 18) << QPointF(55, 32);
-    iconPainter.drawPolygon(earRight);
-
-    iconPainter.setBrush(QColor("#2E7D32"));
-    iconPainter.drawEllipse(28, 36, 12, 12);
-    iconPainter.drawEllipse(50, 36, 12, 12);
-
-    iconPainter.setBrush(QColor(249, 168, 37));
-    iconPainter.drawEllipse(38, 48, 14, 10);
-
-    iconPainter.end();
-    ui->logoLabel->setPixmap(pixmap);
+    // Logo from resource
+    QPixmap pixmap(":/icons/login_logo.png");
+    ui->logoLabel->setPixmap(pixmap.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     ui->logoLabel->setAlignment(Qt::AlignCenter);
-    ui->logoLabel->setFixedSize(90, 90);
+    ui->logoLabel->setFixedSize(64, 64);
     ui->logoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
+    // Validator: a-z, A-Z, 0-9, special chars, no space/tab, max 30
+    auto* validator = new QRegularExpressionValidator(
+        QRegularExpression("[a-zA-Z0-9@#$%&*!._\\-+=?/]*"), this);
+    ui->usernameEdit->setValidator(validator);
+    ui->usernameEdit->setMaxLength(30);
+
+    auto* passValidator = new QRegularExpressionValidator(
+        QRegularExpression("[a-zA-Z0-9@#$%&*!._\\-+=?/]*"), this);
+    ui->passwordEdit->setValidator(passValidator);
+    ui->passwordEdit->setMaxLength(30);
+
     connect(ui->loginButton, &QPushButton::clicked, this, &LoginDialog::onLoginClicked);
+
+    // Eye toggle action for password field
+    m_togglePasswordAction = new QAction(this);
+    m_togglePasswordAction->setIcon(QIcon(":/icons/eye-off.svg"));
+    ui->passwordEdit->addAction(m_togglePasswordAction, QLineEdit::TrailingPosition);
+    connect(m_togglePasswordAction, &QAction::triggered, this, &LoginDialog::onTogglePasswordVisibility);
 
     this->setStyleSheet(R"(
         QDialog {
@@ -129,7 +120,7 @@ void LoginDialog::onLoginClicked()
     QString password = ui->passwordEdit->text();
 
     if (username.isEmpty() || password.isEmpty()) {
-        QMessageBox::warning(this, "خطا", "لطفاً نام کاربری و رمز عبور را وارد کنید.");
+        StyledMessageBox::warning(this, "خطا", "لطفاً نام کاربری و رمز عبور را وارد کنید.");
         return;
     }
 
@@ -148,10 +139,17 @@ void LoginDialog::onLoginClicked()
         m_role     = query.value("role").toString();
         accept();
     } else {
-        QMessageBox::warning(this, "خطا", "نام کاربری یا رمز عبور اشتباه است.");
+        StyledMessageBox::warning(this, "خطا", "نام کاربری یا رمز عبور اشتباه است.");
         ui->passwordEdit->clear();
         ui->passwordEdit->setFocus();
     }
+}
+
+void LoginDialog::onTogglePasswordVisibility()
+{
+    bool isPassword = (ui->passwordEdit->echoMode() == QLineEdit::Password);
+    ui->passwordEdit->setEchoMode(isPassword ? QLineEdit::Normal : QLineEdit::Password);
+    m_togglePasswordAction->setIcon(QIcon(isPassword ? ":/icons/eye.svg" : ":/icons/eye-off.svg"));
 }
 
 void LoginDialog::paintEvent(QPaintEvent *event)

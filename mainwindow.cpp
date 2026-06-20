@@ -369,13 +369,6 @@ void MainWindow::onSettingsClicked()
 
     bool expand = !m_settingsExpanded;
     setSettingsExpanded(expand);
-
-    // If collapsing, go to first sub-page by default
-    if (expand) {
-        uncheckAllSubButtons();
-        m_btnSubUsers->setChecked(true);
-        ui->contentStack->setCurrentIndex(kIdxUsers);
-    }
 }
 
 void MainWindow::setSettingsExpanded(bool expanded)

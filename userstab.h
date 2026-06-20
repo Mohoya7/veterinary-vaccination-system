@@ -9,12 +9,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // UsersTab — User management tab in settings
 //
-// Admin sees:
-//   - Change own password (current + new + confirm)
-//   - Technician account section: view username, set new password directly
+// Admin:
+//   - Change own password (current + new + confirm) + eye buttons
+//   - Change technician password (admin confirmation + new + confirm) + eye buttons
 //
-// Technician sees:
-//   - Change own password only (current + new + confirm)
+// Technician:
+//   - Change own password only (current + new + confirm) + eye buttons
+//
+// All password fields: max 30 chars, no spaces/tabs, allowed chars regex
 // ─────────────────────────────────────────────────────────────────────────────
 
 class UsersTab : public QWidget
@@ -34,13 +36,13 @@ private:
     void applyStyle();
     void loadTechnicianInfo();
 
-    // Change own password fields
-    QLineEdit* m_currentPassEdit = nullptr;
-    QLineEdit* m_newPassEdit     = nullptr;
-    QLineEdit* m_confirmPassEdit = nullptr;
+    // Own password fields
+    QLineEdit* m_currentPassEdit   = nullptr;
+    QLineEdit* m_newPassEdit       = nullptr;
+    QLineEdit* m_confirmPassEdit   = nullptr;
 
-    // Admin-only: technician section
-    QLabel*    m_techUsernameLabel = nullptr;
+    // Admin-only: tech section
+    QLineEdit* m_adminConfirmEdit  = nullptr; // admin password confirmation
     QLineEdit* m_techNewPassEdit   = nullptr;
     QLineEdit* m_techConfirmEdit   = nullptr;
 

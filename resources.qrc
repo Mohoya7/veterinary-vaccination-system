@@ -8,5 +8,8 @@
         <file>icons/syringe.svg</file>
         <file>icons/users.svg</file>
         <file>icons/chevron-down.svg</file>
+	<file>icons/app.png</file>
+	<file>icons/eye.svg</file>
+	<file>icons/eye-off.svg</file>
     </qresource>
 </RCC>

@@ -7,6 +7,7 @@
 #include "persiandate.h"
 #include "animaltypeinfo.h"
 #include "session.h"
+#include "database.h"
 
 #include <QSqlQuery>
 #include <QDate>
@@ -661,8 +662,8 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
     std::function<void(int)> appendRows = [&](int offset) {
         QSqlQuery q;
         q.prepare(
-            "SELECT v.id, vt.name AS vaccine_name, "
-            "v.vaccinated_at, v.next_reminder_at "
+            "SELECT v.id, vt.name AS vaccine_name, v.vaccine_type_id, "
+            "v.vaccinated_at, v.next_reminder_at, v.is_renewed "
             "FROM vaccinations v "
             "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
             "WHERE v.animal_id = :id "
@@ -681,14 +682,19 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
             fetched++;
             if (fetched > kHistPageSize) break;
 
-            int   vacId    = q.value("id").toInt();
-            QDate vacDate  = q.value("vaccinated_at").toDate();
-            QDate nextDate = q.value("next_reminder_at").toDate();
+            int   vacId         = q.value("id").toInt();
+            int   vaccineTypeId = q.value("vaccine_type_id").toInt();
+            QDate vacDate       = q.value("vaccinated_at").toDate();
+            QDate nextDate      = q.value("next_reminder_at").toDate();
+            bool  isRenewed     = q.value("is_renewed").toBool();
 
+            // وضعیت واقعی: تمدید شده فقط وقتی واقعاً واکسن جدیدتری ثبت
+            // شده باشد (is_renewed=1)، وگرنه بر اساس تاریخ یادآوری.
             QString st, sb, sf;
-            if      (nextDate < today)  { st="تأخیر دارد"; sb="#FFEBEE"; sf="#C62828"; }
-            else if (nextDate == today) { st="موعد رسیده"; sb="#FFF9C4"; sf="#F57F17"; }
-            else                        { st="تمدید شده";  sb="#E8F5E9"; sf="#2E7D32"; }
+            if      (isRenewed)         { st="تمدید شده";   sb="#E8F5E9"; sf="#2E7D32"; }
+            else if (nextDate < today)  { st="تأخیر دارد";  sb="#FFEBEE"; sf="#C62828"; }
+            else if (nextDate == today) { st="موعد رسیده";  sb="#FFF9C4"; sf="#F57F17"; }
+            else                        { st="موعد نرسیده"; sb="#E3F2FD"; sf="#1565C0"; }
 
             int row = startRow + (fetched - 1);
             tbl->insertRow(row);
@@ -734,10 +740,19 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
         }
         QPushButton:hover { background: #FFEBEE; }
     )");
-                connect(delBtn, &QPushButton::clicked, &histDialog, [&, vacId]() {
+                connect(delBtn, &QPushButton::clicked, &histDialog, [&, vacId, vaccineTypeId]() {
                     if (!StyledMessageBox::question(&histDialog, "حذف واکسن",
                                                     "آیا از حذف این واکسن مطمئن هستید؟"))
                         return;
+
+                    // قبل از حذف، is_renewed فعلی را می‌خوانیم چون بعد از
+                    // DELETE دیگر در دسترس نیست.
+                    QSqlQuery infoQ;
+                    infoQ.prepare("SELECT is_renewed FROM vaccinations WHERE id=:id");
+                    infoQ.bindValue(":id", vacId);
+                    infoQ.exec();
+                    bool wasRenewed = infoQ.next() && infoQ.value("is_renewed").toBool();
+
                     QSqlQuery dq;
                     dq.prepare("DELETE FROM vaccinations WHERE id=:id");
                     dq.bindValue(":id", vacId);
@@ -745,6 +760,11 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
                         StyledMessageBox::error(&histDialog, "خطا", "خطا در حذف واکسن.");
                         return;
                     }
+
+                    // reminder_followups مرتبط با CASCADE خودکار حذف می‌شود.
+                    // زنجیره‌ی is_renewed این گروه را به‌روزرسانی می‌کنیم.
+                    Database::onVaccinationDeleted(animalId, vaccineTypeId, wasRenewed);
+
                     reloadTable();
                 });
                 actL->addWidget(delBtn);

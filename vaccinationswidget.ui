@@ -46,9 +46,10 @@
         <item>
          <widget class="QComboBox" name="statusCombo">
          <item><property name="text"><string>همه وضعیت‌ها</string></property></item>
+         <item><property name="text"><string>موعد نرسیده</string></property></item>
          <item><property name="text"><string>موعد رسیده</string></property></item>
-         <item><property name="text"><string>تمدید شده</string></property></item>
          <item><property name="text"><string>تأخیر دارد</string></property></item>
+         <item><property name="text"><string>تمدید شده</string></property></item>
          </widget>
         </item>
         <item>

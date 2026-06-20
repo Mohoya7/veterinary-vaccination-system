@@ -32,6 +32,7 @@ private:
     int m_animalId      = -1;
     int m_vaccinationId = -1; // -1 = add mode
     int m_animalTypeId = -1;
+    int m_oldVaccineTypeId = -1; // مقدار vaccine_type_id قبل از ویرایش (فقط در edit mode پر می‌شود)
     QMap<int, int> m_typeIdToDefaultDays;
 };
 

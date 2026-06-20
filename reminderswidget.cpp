@@ -810,7 +810,7 @@ void RemindersWidget::appendRows(int offset)
         "JOIN owners o ON a.owner_id = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
         + buildWhereClause()
-        + "ORDER BY v.next_reminder_at ASC "
+        + "ORDER BY v.next_reminder_at DESC, a.name ASC "
           "LIMIT :limit OFFSET :offset";
 
     QSqlQuery q;
@@ -1120,7 +1120,7 @@ void RemindersWidget::onExportPdfClicked()
         "JOIN owners o ON a.owner_id = o.id "
         "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
         + buildWhereClause()
-        + "ORDER BY v.next_reminder_at ASC";
+        + "ORDER BY v.next_reminder_at DESC, a.name ASC";
 
     QSqlQuery q;
     q.prepare(sql);

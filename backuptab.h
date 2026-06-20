@@ -10,6 +10,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BackupTab — Admin-only backup settings tab
+// Backup password is hashed (SHA-256) before storing in database
 // ─────────────────────────────────────────────────────────────────────────────
 
 class BackupTab : public QWidget
@@ -18,8 +19,6 @@ class BackupTab : public QWidget
 
 public:
     explicit BackupTab(QWidget* parent = nullptr);
-
-    // Called on app startup to check and run auto-backup if due
     static void checkAndRunAutoBackup();
 
 private slots:
@@ -35,17 +34,14 @@ private:
                           const QString& password,
                           QString& errorOut);
 
-    QLineEdit*   m_pathEdit            = nullptr;
-    QSpinBox*    m_intervalSpin        = nullptr;
-    QLineEdit*   m_passwordEdit        = nullptr;
-    QPushButton* m_btnShowPassword     = nullptr;
-    QPushButton* m_btnChangePassword   = nullptr;
-    QLabel*      m_passwordStatusLbl   = nullptr;
-    QLabel*      m_lastBackupLabel     = nullptr;
-    QPushButton* m_btnBrowse           = nullptr;
-    QPushButton* m_btnSave             = nullptr;
-    QPushButton* m_btnBackupNow        = nullptr;
-    bool         m_passwordIsSet       = false;
+    QLineEdit*   m_pathEdit           = nullptr;
+    QSpinBox*    m_intervalSpin       = nullptr;
+    QPushButton* m_btnChangePassword  = nullptr;
+    QLabel*      m_lastBackupLabel    = nullptr;
+    QPushButton* m_btnBrowse          = nullptr;
+    QPushButton* m_btnSave            = nullptr;
+    QPushButton* m_btnBackupNow       = nullptr;
+    bool         m_passwordIsSet      = false;
 };
 
 #endif // BACKUPTAB_H
