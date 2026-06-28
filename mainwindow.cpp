@@ -10,6 +10,7 @@
 #include "backuptab.h"
 #include "abouttab.h"
 #include "session.h"
+#include "pagedirtytracker.h"
 
 #include <QPainter>
 #include <QIcon>
@@ -321,6 +322,33 @@ MainWindow::MainWindow(const QString& role, QWidget *parent)
     ui->contentStack->addWidget(m_about);             // index 8
 
     ui->contentStack->setCurrentIndex(0);
+
+    // ── Reload فقط در صورت «کثیف بودن» صفحه‌ی مقصد ──────────────────────────
+    // وقتی کاربر بین صفحات سوییچ می‌کند، اگر دیتای آن صفحه جای دیگری تغییر
+    // کرده باشد (PageDirtyTracker)، با حفظ فیلتر/سرچ/offset/پروفایل فعلی
+    // دوباره خوانده می‌شود. اگر چیزی تغییر نکرده باشد، هیچ کوئری‌ای زده نمی‌شود.
+    connect(ui->contentStack, &QStackedWidget::currentChanged, this, [this](int idx) {
+        AppPage page;
+        switch (idx) {
+        case kIdxDashboard:    page = AppPage::Dashboard;    break;
+        case kIdxAnimals:      page = AppPage::Animals;      break;
+        case kIdxOwners:       page = AppPage::Owners;       break;
+        case kIdxReminders:    page = AppPage::Reminders;    break;
+        case kIdxVaccinations: page = AppPage::Vaccinations; break;
+        case kIdxAnimalTypes:  page = AppPage::AnimalTypes;  break;
+        default: return; // Users/Backup/About به این مکانیزم وابسته نیستند
+        }
+        if (!PageDirtyTracker::instance().consumeDirty(page)) return;
+
+        switch (page) {
+        case AppPage::Dashboard:    m_dashboard->loadData();                 break;
+        case AppPage::Animals:      m_animals->reloadPreservingState();      break;
+        case AppPage::Owners:       m_owners->reloadPreservingState();       break;
+        case AppPage::Reminders:    m_reminders->reloadPreservingState();    break;
+        case AppPage::Vaccinations: m_vaccinations->reloadPreservingState(); break;
+        case AppPage::AnimalTypes:  m_animalTypes->reloadPreservingState();  break;
+        }
+    });
 
     // ── Cross-widget navigation ──────────────────────────────────────────────
     connect(m_animals, &AnimalsWidget::navigateToOwner, this, [this](int ownerId) {

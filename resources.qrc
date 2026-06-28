@@ -11,5 +11,6 @@
 	<file>icons/app.png</file>
 	<file>icons/eye.svg</file>
 	<file>icons/eye-off.svg</file>
+	<file>icons/background.png</file>
     </qresource>
 </RCC>

@@ -3,6 +3,7 @@
 #include "persiandatepicker.h"
 #include "styledmessagebox.h"
 #include "database.h"
+#include "pagedirtytracker.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QMessageBox>
@@ -89,6 +90,19 @@ AddVaccineDialog::AddVaccineDialog(int animalId, int vaccinationId, QWidget *par
 }
 
 AddVaccineDialog::~AddVaccineDialog() { delete ui; }
+
+void AddVaccineDialog::prefillFrom(int vaccineTypeId, int reminderDays)
+{
+    for (int i = 0; i < ui->vaccineTypeCombo->count(); i++) {
+        if (ui->vaccineTypeCombo->itemData(i).toInt() == vaccineTypeId) {
+            ui->vaccineTypeCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+    // مقدار واقعی رکورد قبلی را می‌گذاریم، نه پیش‌فرضِ خودِ نوع واکسن
+    // (که onVaccineTypeChanged با تغییر ایندکس بالا ممکن است جای آن گذاشته باشد)
+    ui->reminderDaysSpin->setValue(reminderDays);
+}
 
 void AddVaccineDialog::loadVaccineTypes()
 {
@@ -296,6 +310,12 @@ void AddVaccineDialog::onSaveClicked()
             m_animalId, m_oldVaccineTypeId,
             m_animalId, vaccineTypeId);
     }
+
+    // این یک نقطه، هم Add هم Edit واکسن را پوشش می‌دهد (هر دو از همینجا رد می‌شوند).
+    // صفحه‌ای که خودش این دیالوگ را باز کرده (Animals یا Vaccinations) بلافاصله
+    // خودش را رفرش می‌کند؛ بقیه فقط موقع بازدید بعدی.
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
 
     accept();
 }

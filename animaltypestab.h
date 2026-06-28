@@ -23,6 +23,10 @@ class AnimalTypesTab : public QWidget
 public:
     explicit AnimalTypesTab(QWidget* parent = nullptr);
 
+    // به‌جای صدا زدن مستقیم loadAnimalTypes(): انتخاب فعلی (نوع حیوان +
+    // نوع واکسن) را هم تا حد امکان حفظ می‌کند
+    void reloadPreservingState();
+
 private slots:
     void onAnimalTypeSelected(int row);
     void onAddAnimalType();

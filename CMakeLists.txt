@@ -25,6 +25,7 @@ qt_add_executable(VetProject
     animaltypeinfo.h
     persiandatepicker.h persiandatepicker.cpp
     session.h
+    pagedirtytracker.h
 
     userstab.h userstab.cpp
     animaltypestab.h animaltypestab.cpp
@@ -47,8 +48,14 @@ qt_add_resources(VetProject "resources"
         icons/chevron-down.svg
         icons/app.png
         icons/login_logo.png
-	icons/eye.svg
-	icons/eye-off.svg
+        icons/eye.svg
+        icons/eye-off.svg
+        icons/background.png
+        icons/man-profile.png
+        icons/woman-profile.png
+        icons/plus.svg
+        icons/edit-2.svg
+        icons/trash-2.svg
 
 
 )

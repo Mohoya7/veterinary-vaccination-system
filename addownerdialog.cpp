@@ -1,6 +1,7 @@
 #include "addownerdialog.h"
 #include "ui_addownerdialog.h"
 #include "styledmessagebox.h"
+#include "pagedirtytracker.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QMessageBox>
@@ -204,5 +205,12 @@ void AddOwnerDialog::onSaveClicked()
 
     m_savedOwnerId = (m_ownerId < 0) ? q.lastInsertId().toInt() : m_ownerId;
     m_savedPhone   = phone;
+
+    // Owners صفحه‌ای که خودش این دیالوگ را باز کرده، بلافاصله خودش را
+    // رفرش می‌کند؛ بقیه (که اسم/تلفن صاحب را نمایش می‌دهند) موقع بازدید بعدی.
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Owners,
+         AppPage::Vaccinations, AppPage::Reminders});
+
     accept();
 }

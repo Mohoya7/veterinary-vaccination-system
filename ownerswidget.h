@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QTimer>
 
 namespace Ui { class OwnersWidget; }
 
@@ -17,11 +18,13 @@ public:
     void loadData();
     void showOwnerById(int ownerId);
 
+    // به‌جای loadData(): فیلتر/سرچ/offset/پروفایل فعلی را حفظ می‌کند
+    void reloadPreservingState();
+
 signals:
     void navigateToAnimal(int animalId);
 
 private slots:
-    void onSearchChanged(const QString& text);
     void onOwnerSelected(QListWidgetItem* current, QListWidgetItem* previous);
     void onAddOwnerClicked();
     void onEditOwnerClicked();
@@ -42,6 +45,7 @@ private:
     static constexpr int m_pageSize = 50;
     bool m_hasMore       = false;
     QPushButton* m_loadMoreBtn = nullptr;
+    QTimer* m_searchDebounce   = nullptr; // debounce فیلد سرچ لیست (300ms)
 
     void appendOwners(const QString& filter, int offset);
 };

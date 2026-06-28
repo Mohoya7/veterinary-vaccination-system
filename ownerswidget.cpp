@@ -6,6 +6,7 @@
 #include "addvaccinedialog.h"
 #include "styledmessagebox.h"
 #include "session.h"
+#include "pagedirtytracker.h"
 
 #include <QSqlQuery>
 #include <QMessageBox>
@@ -190,7 +191,16 @@ OwnersWidget::OwnersWidget(QWidget *parent)
         QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
-    connect(ui->searchEdit,      &QLineEdit::textChanged,          this, &OwnersWidget::onSearchChanged);
+    // ── Debounce فیلد سرچ (300ms) ───────────────────────────────────────
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(300);
+    connect(m_searchDebounce, &QTimer::timeout, this, [this]() {
+        loadOwners(ui->searchEdit->text().trimmed());
+    });
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+        m_searchDebounce->start();
+    });
     connect(ui->ownerListWidget, &QListWidget::currentItemChanged, this, &OwnersWidget::onOwnerSelected);
     connect(ui->btnAddOwner,     &QPushButton::clicked,            this, &OwnersWidget::onAddOwnerClicked);
     connect(ui->btnEdit,         &QPushButton::clicked,            this, &OwnersWidget::onEditOwnerClicked);
@@ -203,22 +213,79 @@ OwnersWidget::~OwnersWidget() { delete ui; }
 
 void OwnersWidget::loadData() { loadOwners(); }
 
+// ─── Reload با حفظ فیلتر/سرچ/offset/پروفایل فعلی ────────────────────────
+void OwnersWidget::reloadPreservingState()
+{
+    QString filter   = ui->searchEdit->text().trimmed();
+    int savedOwnerId = m_selectedOwnerId; // باید قبل از clear() ذخیره شود؛ همان دلیل AnimalsWidget
+
+    ui->ownerListWidget->clear();
+    if (m_loadMoreBtn) {
+        auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+        if (lay) lay->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+    m_currentOffset = 0;
+    appendOwners(filter, 0); // همیشه فقط صفحه‌ی اول (۵۰ تا)
+
+    if (savedOwnerId > 0) {
+        QSqlQuery q;
+        q.prepare("SELECT id FROM owners WHERE id = :id");
+        q.bindValue(":id", savedOwnerId);
+        q.exec();
+        if (q.next()) {
+            showOwnerProfile(savedOwnerId);
+        } else {
+            clearProfile();
+        }
+    }
+}
+
 void OwnersWidget::showOwnerById(int ownerId)
 {
-    m_selectedOwnerId = ownerId;
-    loadOwners();
+    // اول با فیلتر/سرچ فعلی چک می‌کنیم — شاید با همون فیلتر هم دیده شود
     for (int i = 0; i < ui->ownerListWidget->count(); i++) {
         if (ui->ownerListWidget->item(i)->data(Qt::UserRole).toInt() == ownerId) {
             ui->ownerListWidget->setCurrentRow(i);
             return;
         }
     }
-    showOwnerProfile(ownerId);
-}
 
-void OwnersWidget::onSearchChanged(const QString& text)
-{
-    loadOwners(text.trimmed());
+    // پیدا نشد → فیلتر/سرچ باید پاک شود (هم در UI هم واقعاً در کوئری)
+    // چون صاحبی که لینک شدیم باید دیده شود. سیگنال‌ها موقتاً بلاک می‌شوند
+    // چون خودمان همین پایین دستی ریلود می‌کنیم.
+    ui->searchEdit->blockSignals(true);
+    ui->searchEdit->clear();
+    ui->searchEdit->blockSignals(false);
+
+    ui->ownerListWidget->clear();
+    if (m_loadMoreBtn) {
+        auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+        if (lay) lay->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+    m_currentOffset = 0;
+
+    // تا جایی که لازم است صفحه‌بندی را جلو می‌بریم تا صاحب پیدا شود
+    bool found = false;
+    for (int page = 0; page < 200 && !found; ++page) {
+        int before = m_currentOffset;
+        appendOwners("", m_currentOffset);
+        for (int i = 0; i < ui->ownerListWidget->count(); i++) {
+            if (ui->ownerListWidget->item(i)->data(Qt::UserRole).toInt() == ownerId) {
+                ui->ownerListWidget->setCurrentRow(i);
+                found = true;
+                break;
+            }
+        }
+        if (m_currentOffset == before) break;
+        if (!m_loadMoreBtn) break;
+    }
+
+    if (!found)
+        showOwnerProfile(ownerId);
 }
 
 void OwnersWidget::loadOwners(const QString& filter)
@@ -543,8 +610,7 @@ void OwnersWidget::onEditOwnerClicked()
     if (m_selectedOwnerId < 0) return;
     AddOwnerDialog dlg(m_selectedOwnerId, this);
     if (dlg.exec() != QDialog::Accepted) return;
-    loadOwners();
-    showOwnerProfile(m_selectedOwnerId);
+    reloadPreservingState();
 }
 
 void OwnersWidget::onDeleteOwnerClicked()
@@ -568,6 +634,9 @@ void OwnersWidget::onDeleteOwnerClicked()
     q.prepare("DELETE FROM owners WHERE id = :id");
     q.bindValue(":id", m_selectedOwnerId); q.exec();
 
-    clearProfile();
-    loadOwners();
+    // حیوانات و واکسن‌های این صاحب هم با CASCADE حذف شدند
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
+
+    reloadPreservingState(); // فیلتر/سرچ فعلی حفظ می‌شود؛ پروفایل چون دیگر وجود ندارد خودکار پاک می‌شود
 }

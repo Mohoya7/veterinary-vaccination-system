@@ -1,6 +1,7 @@
 #include "reminderswidget.h"
 #include "animaltypeinfo.h"
 #include "styledmessagebox.h"
+#include "pagedirtytracker.h"
 #include <QRadioButton>
 #include <QButtonGroup>
 #include "ui_reminderswidget.h"
@@ -13,6 +14,7 @@
 #include <QTableWidgetItem>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -41,9 +43,16 @@ RemindersWidget::RemindersWidget(QWidget *parent)
     setLayoutDirection(Qt::RightToLeft);
 
     applyStyle();
+    loadAnimalTypeCombo();   // قبلاً هاردکد در .ui بود؛ حالا از animal_types خوانده می‌شود
 
-    connect(ui->searchEdit,      &QLineEdit::textChanged,
-            this, &RemindersWidget::onFiltersChanged);
+    // ── Debounce فیلد سرچ (300ms) ───────────────────────────────────────
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(300);
+    connect(m_searchDebounce, &QTimer::timeout, this, &RemindersWidget::onFiltersChanged);
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+        m_searchDebounce->start();
+    });
     connect(ui->animalTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) {
                 loadVaccineTypeCombo();
@@ -91,6 +100,15 @@ void RemindersWidget::loadData()
 {
     loadStats();
     loadTable();
+}
+
+// ─── Reload با حفظ فیلتر/سرچ/offset فعلی ─────────────────────────────────
+void RemindersWidget::reloadPreservingState()
+{
+    loadAnimalTypeCombo();
+    loadVaccineTypeCombo();
+    loadStats();
+    loadTable(); // فقط صفحه‌ی اول
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,17 +329,41 @@ void RemindersWidget::applyStyle()
 // Slots
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── loadAnimalTypeCombo ──────────────────────────────────────────────────────
+// قبلاً هاردکد در .ui بود (همه/سگ/گربه)؛ حالا از animal_types خوانده می‌شود
+void RemindersWidget::loadAnimalTypeCombo()
+{
+    int savedTypeId = ui->animalTypeCombo->count() > 0
+                          ? ui->animalTypeCombo->currentData().toInt()
+                          : -1;
+
+    ui->animalTypeCombo->blockSignals(true);
+    ui->animalTypeCombo->clear();
+    ui->animalTypeCombo->addItem("همه انواع", -1);
+
+    QSqlQuery typeQ;
+    typeQ.exec("SELECT id, name FROM animal_types ORDER BY id");
+    while (typeQ.next())
+        ui->animalTypeCombo->addItem(typeQ.value("name").toString(), typeQ.value("id").toInt());
+
+    int idx = ui->animalTypeCombo->findData(savedTypeId);
+    ui->animalTypeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+    ui->animalTypeCombo->blockSignals(false);
+}
+
 // ── loadVaccineTypeCombo ─────────────────────────────────────────────────────
 void RemindersWidget::loadVaccineTypeCombo()
 {
-    int animalTypeIdx = ui->animalTypeCombo->currentIndex();
+    int animalTypeId = ui->animalTypeCombo->count() > 0
+                           ? ui->animalTypeCombo->currentData().toInt()
+                           : -1;
 
     ui->vaccineTypeCombo->blockSignals(true);
     ui->vaccineTypeCombo->clear();
     ui->vaccineTypeCombo->addItem("همه واکسن‌ها", -1);
 
     QSqlQuery q;
-    if (animalTypeIdx == 0) {
+    if (animalTypeId == -1) {
         q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
     } else {
         q.prepare(
@@ -330,7 +372,7 @@ void RemindersWidget::loadVaccineTypeCombo()
             "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
             "WHERE vta.animal_type_id = :atid "
             "ORDER BY vt.name");
-        q.bindValue(":atid", animalTypeIdx);
+        q.bindValue(":atid", animalTypeId);
     }
     q.exec();
     while (q.next())
@@ -545,11 +587,11 @@ void RemindersWidget::loadStats()
 
 QString RemindersWidget::buildWhereClause() const
 {
-    bool    modeToday     = ui->btnModeToday->isChecked();
-    QString search        = ui->searchEdit->text().trimmed();
-    int     animalTypeIdx = ui->animalTypeCombo->currentIndex();
-    int     followUpIdx   = ui->followUpCombo->currentIndex();
-    int     responseIdx   = ui->responseCombo->currentIndex();
+    bool    modeToday    = ui->btnModeToday->isChecked();
+    QString search       = ui->searchEdit->text().trimmed();
+    int     animalTypeId = ui->animalTypeCombo->currentData().toInt();
+    int     followUpIdx  = ui->followUpCombo->currentIndex();
+    int     responseIdx  = ui->responseCombo->currentIndex();
 
     QString w = "WHERE rf.is_resolved = FALSE ";
 
@@ -565,8 +607,8 @@ QString RemindersWidget::buildWhereClause() const
              "OR a.file_number LIKE :search4 "
              "OR o.phone_secondary LIKE :search5) ";
 
-    if (animalTypeIdx == 1) w += "AND a.animal_type_id = 1 ";
-    else if (animalTypeIdx == 2) w += "AND a.animal_type_id = 2 ";
+    if (animalTypeId != -1)
+        w += "AND a.animal_type_id = :atype ";
 
     // فیلتر نوع واکسن
     int vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
@@ -593,6 +635,10 @@ void RemindersWidget::bindWhereParams(QSqlQuery& q) const
     int vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
     if (vaccineTypeId > 0)
         q.bindValue(":vtid", vaccineTypeId);
+
+    int animalTypeId = ui->animalTypeCombo->currentData().toInt();
+    if (animalTypeId != -1)
+        q.bindValue(":atype", animalTypeId);
 
     if (!modeToday) {
         if (m_subManualMode) {
@@ -634,12 +680,12 @@ void RemindersWidget::loadTable()
 {
     auto* tbl = ui->remindersTable;
     tbl->setRowCount(0);
-    tbl->setColumnCount(11); // +3: row number, file_number, vaccination date
+    tbl->setColumnCount(12); // +1: دکمه‌ی تمدید سریع واکسن
     tbl->setLayoutDirection(Qt::RightToLeft);
 
     QStringList headers = {
         "#", "شماره پرونده", "حیوان", "نوع", "صاحب", "شماره",
-        "نوع واکسن", "تاریخ تزریق", "موعد یادآوری", "پیگیری شد", "پاسخ صاحب"
+        "نوع واکسن", "تاریخ تزریق", "موعد یادآوری", "پیگیری شد", "پاسخ صاحب", "افزودن واکسن"
     };
     tbl->setHorizontalHeaderLabels(headers);
 
@@ -802,7 +848,8 @@ void RemindersWidget::appendRows(int offset)
         "a.id AS animal_id, a.name AS animal_name, a.file_number, a.animal_type_id, "
         "o.id AS owner_id, "
         "CONCAT(o.first_name,' ',o.last_name) AS owner_name, o.phone, "
-        "vt.name AS vaccine_name, v.vaccinated_at, v.next_reminder_at, "
+        "vt.name AS vaccine_name, v.vaccine_type_id, v.reminder_days, "
+        "v.vaccinated_at, v.next_reminder_at, "
         "rf.is_followed_up, rf.owner_responded "
         "FROM reminder_followups rf "
         "JOIN vaccinations v ON rf.vaccination_id = v.id "
@@ -844,6 +891,8 @@ void RemindersWidget::appendRows(int offset)
         QString ownerName    = q.value("owner_name").toString();
         QString phone        = q.value("phone").toString();
         QString vaccineName  = q.value("vaccine_name").toString();
+        int     vaccineTypeId= q.value("vaccine_type_id").toInt();
+        int     reminderDays = q.value("reminder_days").toInt();
         QDate   vacDate      = q.value("vaccinated_at").toDate();
         QDate   reminderDate = q.value("next_reminder_at").toDate();
         bool    isFollowedUp = q.value("is_followed_up").toBool();
@@ -926,6 +975,36 @@ void RemindersWidget::appendRows(int offset)
         // Col 10: owner response combo
         int currentResp = ownerResp.isNull() ? 0 : (ownerResp.toBool() ? 1 : 2);
         tbl->setCellWidget(row, 10, makeResponseCombo(rfId, currentResp));
+
+        // Col 11: دکمه‌ی «+» برای تمدید سریع همین واکسن (برای همه‌ی رکوردها)
+        {
+            auto* btnAdd = new QPushButton;
+            btnAdd->setIcon(QIcon(":/icons/plus.svg"));
+            btnAdd->setIconSize(QSize(16, 16));
+            btnAdd->setFixedSize(28, 28);
+            btnAdd->setCursor(Qt::PointingHandCursor);
+            btnAdd->setToolTip("ثبت واکسن جدید (تمدید)");
+            btnAdd->setStyleSheet(R"(
+                QPushButton {
+                    background: #E8F5E9; border: none; border-radius: 6px;
+                }
+                QPushButton:hover { background: #C8E6C9; }
+            )");
+            connect(btnAdd, &QPushButton::clicked, this,
+                    [this, animalId, vaccineTypeId, reminderDays]() {
+                        AddVaccineDialog dlg(animalId, this);
+                        dlg.prefillFrom(vaccineTypeId, reminderDays);
+                        if (dlg.exec() == QDialog::Accepted)
+                            reloadPreservingState();
+                    });
+            auto* w   = new QWidget;
+            auto* lay = new QHBoxLayout(w);
+            lay->setContentsMargins(0, 0, 0, 0);
+            lay->setAlignment(Qt::AlignCenter);
+            lay->addWidget(btnAdd);
+            w->setStyleSheet("background: transparent;");
+            tbl->setCellWidget(row, 11, w);
+        }
 
         row++;
     }

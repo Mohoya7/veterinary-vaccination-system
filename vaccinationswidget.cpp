@@ -6,6 +6,7 @@
 #include "styledmessagebox.h"
 #include "session.h"
 #include "database.h"
+#include "pagedirtytracker.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -13,6 +14,7 @@
 #include <QTableWidgetItem>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QEvent>
@@ -63,13 +65,23 @@ VaccinationsWidget::VaccinationsWidget(QWidget *parent)
         ui->singleDateEdit, m_pickerSingle);
 
     applyStyle();
+    loadAnimalTypeCombo();   // قبلاً هاردکد در .ui بود؛ حالا از animal_types خوانده می‌شود
     loadVaccineTypeCombo();
 
     ui->btnModeRange->setChecked(true);
     ui->btnModeSingle->setChecked(false);
 
-    connect(ui->searchEdit,       &QLineEdit::textChanged,
-            this, &VaccinationsWidget::onFiltersChanged);
+    // ── Debounce فیلد سرچ (300ms) — فقط همین، چون با هر keystroke فایر می‌شود ──
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(300);
+    connect(m_searchDebounce, &QTimer::timeout, this, [this]() {
+        loadStats();
+        loadTable();
+    });
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+        m_searchDebounce->start();
+    });
     connect(ui->animalTypeCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &VaccinationsWidget::onFiltersChanged);
     connect(ui->statusCombo,      QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -100,6 +112,17 @@ void VaccinationsWidget::loadData()
 {
     loadStats();
     loadTable();
+}
+
+// ─── Reload با حفظ فیلتر/سرچ/offset فعلی ─────────────────────────────────
+// کامبوهای نوع حیوان/واکسن هم دوباره از DB خوانده می‌شوند (شاید نوع جدیدی
+// اضافه/حذف شده باشد) ولی انتخاب فعلی کاربر حفظ می‌شود.
+void VaccinationsWidget::reloadPreservingState()
+{
+    loadAnimalTypeCombo();
+    loadVaccineTypeCombo();
+    loadStats();
+    loadTable(); // هدر/استایل را دوباره می‌سازد و فقط صفحه‌ی اول (۵۰ تا) را با فیلترهای فعلی می‌خواند
 }
 
 void VaccinationsWidget::showVaccinationById(int vacId)
@@ -290,14 +313,16 @@ void VaccinationsWidget::applyStyle()
 
 void VaccinationsWidget::loadVaccineTypeCombo()
 {
-    int animalTypeIdx = ui->animalTypeCombo->currentIndex();
+    int animalTypeId = ui->animalTypeCombo->count() > 0
+                           ? ui->animalTypeCombo->currentData().toInt()
+                           : -1;
 
     ui->vaccineTypeCombo->blockSignals(true);
     ui->vaccineTypeCombo->clear();
     ui->vaccineTypeCombo->addItem("همه واکسن‌ها", -1);
 
     QSqlQuery q;
-    if (animalTypeIdx == 0) {
+    if (animalTypeId == -1) {
         q.prepare("SELECT id, name FROM vaccine_types ORDER BY name");
     } else {
         q.prepare(
@@ -306,7 +331,7 @@ void VaccinationsWidget::loadVaccineTypeCombo()
             "JOIN vaccine_type_animals vta ON vta.vaccine_type_id = vt.id "
             "WHERE vta.animal_type_id = :atid "
             "ORDER BY vt.name");
-        q.bindValue(":atid", animalTypeIdx);
+        q.bindValue(":atid", animalTypeId);
     }
     q.exec();
     while (q.next())
@@ -314,6 +339,27 @@ void VaccinationsWidget::loadVaccineTypeCombo()
                                       q.value("id").toInt());
 
     ui->vaccineTypeCombo->blockSignals(false);
+}
+
+// ─── Load animal type combo from DB (preserving current selection) ──────
+void VaccinationsWidget::loadAnimalTypeCombo()
+{
+    int savedTypeId = ui->animalTypeCombo->count() > 0
+                          ? ui->animalTypeCombo->currentData().toInt()
+                          : -1;
+
+    ui->animalTypeCombo->blockSignals(true);
+    ui->animalTypeCombo->clear();
+    ui->animalTypeCombo->addItem("همه انواع", -1);
+
+    QSqlQuery q;
+    q.exec("SELECT id, name FROM animal_types ORDER BY id");
+    while (q.next())
+        ui->animalTypeCombo->addItem(q.value("name").toString(), q.value("id").toInt());
+
+    int idx = ui->animalTypeCombo->findData(savedTypeId);
+    ui->animalTypeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+    ui->animalTypeCombo->blockSignals(false);
 }
 
 void VaccinationsWidget::onDateModeChanged()
@@ -377,7 +423,7 @@ void VaccinationsWidget::loadStats()
 QString VaccinationsWidget::buildWhereClause() const
 {
     QString search        = ui->searchEdit->text().trimmed();
-    int     animalTypeIdx = ui->animalTypeCombo->currentIndex();
+    int     animalTypeId  = ui->animalTypeCombo->currentData().toInt(); // -1 = همه انواع
     int     statusIdx     = ui->statusCombo->currentIndex();
     int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
 
@@ -389,8 +435,8 @@ QString VaccinationsWidget::buildWhereClause() const
                  "OR CONCAT(o.first_name,' ',o.last_name) LIKE :search3 "
                  "OR a.file_number LIKE :search4) ";
 
-    if      (animalTypeIdx == 1) where += "AND a.animal_type_id = 1 ";
-    else if (animalTypeIdx == 2) where += "AND a.animal_type_id = 2 ";
+    if (animalTypeId != -1)
+        where += "AND a.animal_type_id = :atype ";
 
     if (vaccineTypeId > 0)
         where += "AND v.vaccine_type_id = :vtid ";
@@ -417,6 +463,7 @@ QString VaccinationsWidget::buildWhereClause() const
 void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
 {
     QString search        = ui->searchEdit->text().trimmed();
+    int     animalTypeId  = ui->animalTypeCombo->currentData().toInt();
     int     vaccineTypeId = ui->vaccineTypeCombo->currentData().toInt();
 
     if (!search.isEmpty()) {
@@ -426,6 +473,8 @@ void VaccinationsWidget::bindWhereParams(QSqlQuery& q) const
         q.bindValue(":search3", like);
         q.bindValue(":search4", like);
     }
+    if (animalTypeId != -1)
+        q.bindValue(":atype", animalTypeId);
     if (vaccineTypeId > 0)
         q.bindValue(":vtid", vaccineTypeId);
 
@@ -817,6 +866,25 @@ QWidget* VaccinationsWidget::makeBadge(const QString& text,
 
 QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
 {
+    // یک کوئری برای گرفتن اطلاعات لازم جهت تصمیم نمایش دکمه‌ی «+» و پیش‌پر کردنش
+    int  animalId      = -1;
+    int  vaccineTypeId = -1;
+    int  reminderDays  = 0;
+    bool isRenewed     = true;
+    {
+        QSqlQuery q;
+        q.prepare("SELECT animal_id, vaccine_type_id, reminder_days, is_renewed "
+                  "FROM vaccinations WHERE id=:id");
+        q.bindValue(":id", vaccinationId);
+        q.exec();
+        if (q.next()) {
+            animalId      = q.value("animal_id").toInt();
+            vaccineTypeId = q.value("vaccine_type_id").toInt();
+            reminderDays  = q.value("reminder_days").toInt();
+            isRenewed     = q.value("is_renewed").toBool();
+        }
+    }
+
     // outer: پر می‌کنه کل cell رو
     auto* container = new QWidget;
     container->setStyleSheet("background: transparent;");
@@ -834,38 +902,60 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
     lay->setAlignment(Qt::AlignCenter);
     outerLay->addWidget(inner, 0, Qt::AlignVCenter);
 
+    // دکمه‌ی «+» تمدید سریع — فقط برای رکوردهایی که هنوز تمدید نشده‌اند
+    if (!isRenewed && animalId > 0) {
+        auto* btnAdd = new QPushButton;
+        btnAdd->setIcon(QIcon(":/icons/plus.svg"));
+        btnAdd->setIconSize(QSize(16, 16));
+        btnAdd->setFixedSize(28, 28);
+        btnAdd->setCursor(Qt::PointingHandCursor);
+        btnAdd->setToolTip("ثبت واکسن جدید (تمدید)");
+        btnAdd->setStyleSheet(R"(
+            QPushButton {
+                background: #E8F5E9; border: none; border-radius: 6px;
+            }
+            QPushButton:hover { background: #C8E6C9; }
+        )");
+        connect(btnAdd, &QPushButton::clicked, this, [this, animalId, vaccineTypeId, reminderDays]() {
+            AddVaccineDialog dlg(animalId, this);
+            dlg.prefillFrom(vaccineTypeId, reminderDays);
+            if (dlg.exec() == QDialog::Accepted) reloadPreservingState();
+        });
+        lay->addWidget(btnAdd);
+    }
+
     // Edit button — visible for all roles
-    auto* btnEdit = new QPushButton("ویرایش");
-    btnEdit->setFixedSize(60, 28);
+    auto* btnEdit = new QPushButton;
+    btnEdit->setIcon(QIcon(":/icons/edit-2.svg"));
+    btnEdit->setIconSize(QSize(16, 16));
+    btnEdit->setFixedSize(28, 28);
+    btnEdit->setCursor(Qt::PointingHandCursor);
+    btnEdit->setToolTip("ویرایش");
     btnEdit->setStyleSheet(R"(
         QPushButton {
-            background: white; border: 0.5px solid #E0E0E0;
-            border-radius: 6px; font-size: 11px; color: #555555;
+            background: white; border: 0.5px solid #E0E0E0; border-radius: 6px;
         }
-        QPushButton:hover { border-color: #2E7D32; color: #2E7D32; }
+        QPushButton:hover { border-color: #2E7D32; background: #F1F8E9; }
     )");
 
-    connect(btnEdit, &QPushButton::clicked, this, [this, vaccinationId]() {
-        QSqlQuery q;
-        q.prepare("SELECT animal_id FROM vaccinations WHERE id=:id");
-        q.bindValue(":id", vaccinationId);
-        q.exec();
-        if (!q.next()) return;
-        int animalId = q.value("animal_id").toInt();
+    connect(btnEdit, &QPushButton::clicked, this, [this, vaccinationId, animalId]() {
         AddVaccineDialog dlg(animalId, vaccinationId, this);
-        if (dlg.exec() == QDialog::Accepted) loadData();
+        if (dlg.exec() == QDialog::Accepted) reloadPreservingState();
     });
 
     lay->addWidget(btnEdit);
 
     // Delete button — admin only
     if (Session::instance().isAdmin()) {
-        auto* btnDel = new QPushButton("حذف");
-        btnDel->setFixedSize(50, 28);
+        auto* btnDel = new QPushButton;
+        btnDel->setIcon(QIcon(":/icons/trash-2.svg"));
+        btnDel->setIconSize(QSize(16, 16));
+        btnDel->setFixedSize(28, 28);
+        btnDel->setCursor(Qt::PointingHandCursor);
+        btnDel->setToolTip("حذف");
         btnDel->setStyleSheet(R"(
             QPushButton {
-                background: #FFEBEE; border: 0.5px solid #FFCDD2;
-                border-radius: 6px; font-size: 11px; color: #E53935; padding: 0 10px;
+                background: #FFEBEE; border: 0.5px solid #FFCDD2; border-radius: 6px;
             }
             QPushButton:hover { background: #FFCDD2; border-color: #E53935; }
         )");
@@ -899,7 +989,10 @@ QWidget* VaccinationsWidget::makeActionButtons(int vaccinationId)
             // حالا باید زنجیره‌ی is_renewed این گروه را به‌روزرسانی کنیم.
             Database::onVaccinationDeleted(animalId, vaccineTypeId, wasRenewed);
 
-            loadData();
+            PageDirtyTracker::instance().markDirty(
+                {AppPage::Dashboard, AppPage::Animals, AppPage::Reminders});
+
+            reloadPreservingState();
         });
 
         lay->addWidget(btnDel);
@@ -1064,8 +1157,16 @@ int VaccinationsWidget::showAnimalPickerDialog()
 
     loadAnimals("");
 
-    connect(searchLine, &QLineEdit::textChanged,
-            [&](const QString& t){ loadAnimals(t); });
+    // ── Debounce فیلد سرچ (300ms) ───────────────────────────────────────
+    auto* searchDebounce = new QTimer(&picker);
+    searchDebounce->setSingleShot(true);
+    searchDebounce->setInterval(300);
+    connect(searchDebounce, &QTimer::timeout, &picker, [&](){
+        loadAnimals(searchLine->text());
+    });
+    connect(searchLine, &QLineEdit::textChanged, &picker, [searchDebounce](const QString&){
+        searchDebounce->start();
+    });
     connect(listW, &QListWidget::itemSelectionChanged, [&](){
         btnConfirm->setEnabled(listW->currentItem() != nullptr);
     });
@@ -1089,5 +1190,5 @@ void VaccinationsWidget::onAddVaccineClicked()
     if (dlg.exec() != QDialog::Accepted) return;
 
     StyledMessageBox::success(this, "موفق", "واکسن با موفقیت ثبت شد.");
-    loadData();
+    reloadPreservingState();
 }

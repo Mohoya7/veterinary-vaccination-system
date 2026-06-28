@@ -8,11 +8,13 @@
 #include "animaltypeinfo.h"
 #include "session.h"
 #include "database.h"
+#include "pagedirtytracker.h"
 
 #include <QSqlQuery>
 #include <QDate>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
@@ -104,8 +106,21 @@ AnimalsWidget::AnimalsWidget(QWidget *parent)
         QScrollBar::sub-page:vertical { background: transparent; }
     )");
 
-    connect(ui->searchEdit,      &QLineEdit::textChanged,
-            this, &AnimalsWidget::onSearchChanged);
+    // نوع حیوان دیگر هاردکد نیست؛ از جدول animal_types خوانده می‌شود
+    loadTypeFilterCombo();
+
+    // ── Debounce فیلد سرچ (300ms) ───────────────────────────────────────
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(300);
+    connect(m_searchDebounce, &QTimer::timeout, this, [this]() {
+        loadAnimals(ui->searchEdit->text().trimmed(),
+                    ui->typeFilterCombo->currentData().toInt());
+    });
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+        m_searchDebounce->start();
+    });
+
     connect(ui->typeFilterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AnimalsWidget::onTypeFilterChanged);
     connect(ui->animalListWidget, &QListWidget::currentItemChanged,
@@ -313,8 +328,8 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
                "OR CONCAT(o.first_name,' ',o.last_name) LIKE :s3 "
                "OR a.file_number LIKE :s4 "
                "OR o.phone_secondary LIKE :s5) ";
-    if (typeFilter == 1) sql += "AND a.animal_type_id = 1 ";
-    else if (typeFilter == 2) sql += "AND a.animal_type_id = 2 ";
+    if (typeFilter != -1)
+        sql += "AND a.animal_type_id = :tf ";
 
     sql += QString("ORDER BY a.name LIMIT %1 OFFSET %2")
                .arg(m_pageSize + 1)
@@ -330,6 +345,8 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
         q.bindValue(":s4", like);
         q.bindValue(":s5", like);
     }
+    if (typeFilter != -1)
+        q.bindValue(":tf", typeFilter);
     q.exec();
 
     int fetched = 0;
@@ -386,7 +403,7 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
             connect(m_loadMoreBtn, &QPushButton::clicked, this, [this]() {
                 appendAnimals(
                     ui->searchEdit->text().trimmed(),
-                    ui->typeFilterCombo->currentIndex(),
+                    ui->typeFilterCombo->currentData().toInt(),
                     m_currentOffset);
             });
         } else {
@@ -402,7 +419,67 @@ void AnimalsWidget::appendAnimals(const QString& search, int typeFilter, int off
     }
 }
 
-// ─── Show animal profile ─────────────────────────────────
+// ─── Load type filter combo from DB (preserving current selection) ──────
+void AnimalsWidget::loadTypeFilterCombo()
+{
+    int savedTypeId = ui->typeFilterCombo->count() > 0
+                          ? ui->typeFilterCombo->currentData().toInt()
+                          : -1;
+
+    ui->typeFilterCombo->blockSignals(true);
+    ui->typeFilterCombo->clear();
+    ui->typeFilterCombo->addItem("همه انواع", -1);
+
+    QSqlQuery q;
+    q.exec("SELECT id, name FROM animal_types ORDER BY id");
+    while (q.next())
+        ui->typeFilterCombo->addItem(q.value("name").toString(), q.value("id").toInt());
+
+    int idx = ui->typeFilterCombo->findData(savedTypeId);
+    ui->typeFilterCombo->setCurrentIndex(idx >= 0 ? idx : 0); // اگر نوع حذف شده بود، برگرد به «همه انواع»
+    ui->typeFilterCombo->blockSignals(false);
+}
+
+// ─── Reload با حفظ فیلتر/سرچ/offset/پروفایل فعلی ─────────────────────────
+// به‌جای loadData(): وقتی MainWindow تشخیص می‌دهد این صفحه «کثیف» شده،
+// این تابع را صدا می‌زند (نه loadAnimals که همیشه از صفر شروع می‌کند).
+void AnimalsWidget::reloadPreservingState()
+{
+    QString search    = ui->searchEdit->text().trimmed();
+    int savedAnimalId = m_selectedAnimalId; // باید قبل از clear() ذخیره شود؛ چون clear()
+    // سیگنال currentItemChanged(nullptr) را فایر می‌کند
+    // که onAnimalSelected → clearProfile() را صدا می‌زند
+    // و m_selectedAnimalId را زودتر -1 می‌کند
+
+    // کامبوی نوع حیوان را هم دوباره از DB می‌خوانیم (شاید نوع جدیدی اضافه/حذف شده)
+    loadTypeFilterCombo();
+    int typeFilter = ui->typeFilterCombo->currentData().toInt();
+
+    ui->animalListWidget->clear();
+    if (m_loadMoreBtn) {
+        auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+        if (lay) lay->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
+    }
+    m_currentOffset = 0;
+    appendAnimals(search, typeFilter, 0); // همیشه فقط صفحه‌ی اول (۵۰ تا)، نه تا offset قبلی
+
+    // پروفایل سمت راست — فقط اگر هنوز وجود دارد
+    if (savedAnimalId > 0) {
+        QSqlQuery q;
+        q.prepare("SELECT id FROM animals WHERE id = :id");
+        q.bindValue(":id", savedAnimalId);
+        q.exec();
+        if (q.next()) {
+            showAnimalProfile(savedAnimalId);
+        } else {
+            clearProfile();
+        }
+    }
+}
+
+
 void AnimalsWidget::showAnimalProfile(int animalId)
 {
     m_selectedAnimalId = animalId;
@@ -467,22 +544,54 @@ void AnimalsWidget::showAnimalProfile(int animalId)
 
 void AnimalsWidget::showAnimalById(int animalId)
 {
+    // اول با فیلتر/سرچ فعلی چک می‌کنیم — شاید با همون فیلتر هم دیده شود
     for (int i = 0; i < ui->animalListWidget->count(); i++) {
         if (ui->animalListWidget->item(i)->data(Qt::UserRole).toInt() == animalId) {
             ui->animalListWidget->setCurrentRow(i);
             return;
         }
     }
+
+    // پیدا نشد → فیلتر/سرچ باید پاک شود چون حیوونی که لینک شدیم باید دیده شود
+    // سیگنال‌ها موقتاً بلاک می‌شوند چون خودمان همین پایین دستی ریلود می‌کنیم؛
+    // وگرنه debounce سرچ (300ms) یا onTypeFilterChanged دوباره (و این‌بار فقط
+    // صفحه‌ی اول) ریلود می‌کردند و حلقه‌ی پیدا کردن زیر را خراب می‌کردند.
+    ui->searchEdit->blockSignals(true);
     ui->searchEdit->clear();
+    ui->searchEdit->blockSignals(false);
+
+    ui->typeFilterCombo->blockSignals(true);
     ui->typeFilterCombo->setCurrentIndex(0);
-    loadAnimals();
-    for (int i = 0; i < ui->animalListWidget->count(); i++) {
-        if (ui->animalListWidget->item(i)->data(Qt::UserRole).toInt() == animalId) {
-            ui->animalListWidget->setCurrentRow(i);
-            return;
-        }
+    ui->typeFilterCombo->blockSignals(false);
+
+    ui->animalListWidget->clear();
+    if (m_loadMoreBtn) {
+        auto* lay = qobject_cast<QVBoxLayout*>(ui->listPanel->layout());
+        if (lay) lay->removeWidget(m_loadMoreBtn);
+        m_loadMoreBtn->deleteLater();
+        m_loadMoreBtn = nullptr;
     }
-    showAnimalProfile(animalId);
+    m_currentOffset = 0;
+
+    // تا جایی که لازم است صفحه‌بندی را جلو می‌بریم تا حیوون پیدا شود
+    // (نه فقط صفحه‌ی اول) — با یک سقف امن برای جلوگیری از حلقه‌ی بی‌پایان
+    bool found = false;
+    for (int page = 0; page < 200 && !found; ++page) {
+        int before = m_currentOffset;
+        appendAnimals("", -1, m_currentOffset);
+        for (int i = 0; i < ui->animalListWidget->count(); i++) {
+            if (ui->animalListWidget->item(i)->data(Qt::UserRole).toInt() == animalId) {
+                ui->animalListWidget->setCurrentRow(i);
+                found = true;
+                break;
+            }
+        }
+        if (m_currentOffset == before) break; // دیگر رکوردی نیست
+        if (!m_loadMoreBtn) break;             // صفحه‌ی آخر بود
+    }
+
+    if (!found)
+        showAnimalProfile(animalId); // پیدا نشد در لیست؛ پروفایل را مستقیم نشان بده
 }
 
 void AnimalsWidget::clearProfile()
@@ -598,6 +707,22 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
     auto* bodyLay = new QVBoxLayout(body);
     bodyLay->setContentsMargins(16, 16, 16, 16);
 
+    // ── فیلد سرچ (بر اساس نام نوع واکسن) — debounce 300ms ──────────────────
+    auto* histSearchEdit = new QLineEdit;
+    histSearchEdit->setPlaceholderText("جستجو بر اساس نوع واکسن...");
+    histSearchEdit->setLayoutDirection(Qt::RightToLeft);
+    histSearchEdit->setFixedHeight(36);
+    histSearchEdit->setStyleSheet(R"(
+        QLineEdit {
+            border: 1px solid #A5D6A7; border-radius: 6px;
+            padding: 6px 10px; font-size: 13px;
+            background: #F9FBF9; color: #212121;
+        }
+        QLineEdit:focus { border: 1px solid #2E7D32; background: white; }
+    )");
+    bodyLay->addWidget(histSearchEdit);
+    bodyLay->addSpacing(10);
+
     // Determine column count based on role
     // Admin: 5 columns (vaccine, date, next reminder, status, actions)
     // Technician: 4 columns (no actions column)
@@ -660,16 +785,21 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
 
     // appendRows: loads next page into table
     std::function<void(int)> appendRows = [&](int offset) {
-        QSqlQuery q;
-        q.prepare(
-            "SELECT v.id, vt.name AS vaccine_name, v.vaccine_type_id, "
+        QString sql =
+            "SELECT v.id, vt.name AS vaccine_name, v.vaccine_type_id, v.reminder_days, "
             "v.vaccinated_at, v.next_reminder_at, v.is_renewed "
             "FROM vaccinations v "
             "JOIN vaccine_types vt ON v.vaccine_type_id = vt.id "
-            "WHERE v.animal_id = :id "
-            "ORDER BY v.vaccinated_at DESC "
-            "LIMIT :limit OFFSET :offset");
+            "WHERE v.animal_id = :id ";
+        if (!histSearchEdit->text().trimmed().isEmpty())
+            sql += "AND vt.name LIKE :search ";
+        sql += "ORDER BY v.vaccinated_at DESC LIMIT :limit OFFSET :offset";
+
+        QSqlQuery q;
+        q.prepare(sql);
         q.bindValue(":id",     animalId);
+        if (!histSearchEdit->text().trimmed().isEmpty())
+            q.bindValue(":search", "%" + histSearchEdit->text().trimmed() + "%");
         q.bindValue(":limit",  kHistPageSize + 1);
         q.bindValue(":offset", offset);
         q.exec();
@@ -684,6 +814,7 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
 
             int   vacId         = q.value("id").toInt();
             int   vaccineTypeId = q.value("vaccine_type_id").toInt();
+            int   reminderDays  = q.value("reminder_days").toInt();
             QDate vacDate       = q.value("vaccinated_at").toDate();
             QDate nextDate      = q.value("next_reminder_at").toDate();
             bool  isRenewed     = q.value("is_renewed").toBool();
@@ -712,13 +843,40 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
             actL->setSpacing(6);
             actL->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
 
+            // دکمه‌ی «+» تمدید سریع — فقط برای رکوردهایی که هنوز تمدید نشده‌اند
+            if (!isRenewed) {
+                auto* addBtn = new QPushButton;
+                addBtn->setIcon(QIcon(":/icons/plus.svg"));
+                addBtn->setIconSize(QSize(15, 15));
+                addBtn->setFixedSize(26, 26);
+                addBtn->setCursor(Qt::PointingHandCursor);
+                addBtn->setToolTip("ثبت واکسن جدید (تمدید)");
+                addBtn->setStyleSheet(R"(
+        QPushButton {
+            background: #E8F5E9; border: none; border-radius: 5px;
+        }
+        QPushButton:hover { background: #C8E6C9; }
+    )");
+                connect(addBtn, &QPushButton::clicked, &histDialog,
+                        [&, vaccineTypeId, reminderDays]() {
+                            AddVaccineDialog dlg(animalId, &histDialog);
+                            dlg.prefillFrom(vaccineTypeId, reminderDays);
+                            if (dlg.exec() == QDialog::Accepted)
+                                reloadTable();
+                        });
+                actL->addWidget(addBtn);
+            }
+
             // Edit button — visible for all roles
-            auto* editBtn = new QPushButton("ویرایش");
+            auto* editBtn = new QPushButton;
+            editBtn->setIcon(QIcon(":/icons/edit-2.svg"));
+            editBtn->setIconSize(QSize(15, 15));
+            editBtn->setFixedSize(26, 26);
+            editBtn->setCursor(Qt::PointingHandCursor);
+            editBtn->setToolTip("ویرایش");
             editBtn->setStyleSheet(R"(
     QPushButton {
-        background: white; border: 0.5px solid #C8E6C9;
-        border-radius: 5px; font-size: 11px;
-        color: #2E7D32; padding: 2px 8px; min-height: 24px;
+        background: white; border: 0.5px solid #C8E6C9; border-radius: 5px;
     }
     QPushButton:hover { background: #E8F5E9; }
 )");
@@ -731,12 +889,15 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
 
             // Delete button — admin only
             if (isAdmin) {
-                auto* delBtn = new QPushButton("حذف");
+                auto* delBtn = new QPushButton;
+                delBtn->setIcon(QIcon(":/icons/trash-2.svg"));
+                delBtn->setIconSize(QSize(15, 15));
+                delBtn->setFixedSize(26, 26);
+                delBtn->setCursor(Qt::PointingHandCursor);
+                delBtn->setToolTip("حذف");
                 delBtn->setStyleSheet(R"(
         QPushButton {
-            background: white; border: 0.5px solid #FFCDD2;
-            border-radius: 5px; font-size: 11px;
-            color: #C62828; padding: 2px 8px; min-height: 24px;
+            background: white; border: 0.5px solid #FFCDD2; border-radius: 5px;
         }
         QPushButton:hover { background: #FFEBEE; }
     )");
@@ -765,6 +926,9 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
                     // زنجیره‌ی is_renewed این گروه را به‌روزرسانی می‌کنیم.
                     Database::onVaccinationDeleted(animalId, vaccineTypeId, wasRenewed);
 
+                    PageDirtyTracker::instance().markDirty(
+                        {AppPage::Dashboard, AppPage::Vaccinations, AppPage::Reminders});
+
                     reloadTable();
                 });
                 actL->addWidget(delBtn);
@@ -780,13 +944,22 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
             histLoadMoreBtn->setVisible(hasMore);
     };
 
-    // reloadTable: clears and reloads first page (used after edit/delete)
+    // reloadTable: clears and reloads first page (used after edit/delete/search)
     reloadTable = [&]() {
         tbl->setRowCount(0);
         histOffset = 0;
         if (histLoadMoreBtn) histLoadMoreBtn->setVisible(false);
         appendRows(0);
     };
+
+    // ── Debounce فیلد سرچ (300ms) ───────────────────────────────────────
+    auto* histSearchDebounce = new QTimer(&histDialog);
+    histSearchDebounce->setSingleShot(true);
+    histSearchDebounce->setInterval(300);
+    connect(histSearchDebounce, &QTimer::timeout, &histDialog, [&]() { reloadTable(); });
+    connect(histSearchEdit, &QLineEdit::textChanged, &histDialog, [histSearchDebounce](const QString&) {
+        histSearchDebounce->start();
+    });
 
     // Load-more button — always in layout after table, shown/hidden based on data
     histLoadMoreBtn = new QPushButton("نمایش بیشتر");
@@ -832,14 +1005,9 @@ void AnimalsWidget::onViewVaccinationHistoryClicked()
 }
 
 // ─── Slots ───────────────────────────────────────────────
-void AnimalsWidget::onSearchChanged(const QString& text)
+void AnimalsWidget::onTypeFilterChanged(int /*index*/)
 {
-    loadAnimals(text.trimmed(), ui->typeFilterCombo->currentIndex());
-}
-
-void AnimalsWidget::onTypeFilterChanged(int index)
-{
-    loadAnimals(ui->searchEdit->text().trimmed(), index);
+    loadAnimals(ui->searchEdit->text().trimmed(), ui->typeFilterCombo->currentData().toInt());
 }
 
 void AnimalsWidget::onAnimalSelected(QListWidgetItem* current, QListWidgetItem*)
@@ -978,8 +1146,16 @@ void AnimalsWidget::onAddAnimalClicked()
 
     loadOwners("", 0, true);
 
-    connect(searchLine, &QLineEdit::textChanged,
-            [&](const QString& t){ loadOwners(t, 0, true); });
+    // ── Debounce فیلد سرچ صاحب (300ms) ─────────────────────────────────
+    auto* ownerSearchDebounce = new QTimer(&picker);
+    ownerSearchDebounce->setSingleShot(true);
+    ownerSearchDebounce->setInterval(300);
+    connect(ownerSearchDebounce, &QTimer::timeout, &picker, [&](){
+        loadOwners(searchLine->text(), 0, true);
+    });
+    connect(searchLine, &QLineEdit::textChanged, &picker, [ownerSearchDebounce](const QString&){
+        ownerSearchDebounce->start();
+    });
     connect(loadMoreOwners, &QPushButton::clicked, &picker,
             [&](){ loadOwners(searchLine->text(), ownerOffset, false); });
     connect(listW, &QListWidget::itemSelectionChanged,
@@ -1027,8 +1203,7 @@ void AnimalsWidget::onEditAnimalClicked()
     AddAnimalDialog dlg(ownerId, phone, m_selectedAnimalId, this);
     if (dlg.exec() != QDialog::Accepted) return;
 
-    loadAnimals();
-    showAnimalProfile(m_selectedAnimalId);
+    reloadPreservingState(); // فیلتر/سرچ فعلی حفظ می‌شود، پروفایل همین حیوان دوباره نشان داده می‌شود
 }
 
 void AnimalsWidget::onDeleteAnimalClicked()
@@ -1045,6 +1220,9 @@ void AnimalsWidget::onDeleteAnimalClicked()
     q.prepare("DELETE FROM animals WHERE id=:id");
     q.bindValue(":id", m_selectedAnimalId); q.exec();
 
-    clearProfile();
-    loadAnimals();
+    // واکسن‌های این حیوان هم با CASCADE حذف شدند، پس صفحات مرتبط هم باید بدانند
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Owners, AppPage::Vaccinations, AppPage::Reminders});
+
+    reloadPreservingState(); // فیلتر/سرچ فعلی حفظ می‌شود؛ پروفایل چون دیگر وجود ندارد خودکار پاک می‌شود
 }

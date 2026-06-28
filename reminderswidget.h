@@ -10,6 +10,7 @@
 #include <QCheckBox>
 #include <QDate>
 #include <QEvent>
+#include <QTimer>
 #include "persiandatepicker.h"
 
 class QSqlQuery;
@@ -24,6 +25,10 @@ public:
     explicit RemindersWidget(QWidget *parent = nullptr);
     ~RemindersWidget();
     void loadData();
+
+    // به‌جای loadData(): فیلتر/سرچ/offset فعلی را حفظ می‌کند + کامبوهای
+    // نوع حیوان/نوع واکسن را هم از DB دوباره می‌خواند (با حفظ انتخاب فعلی)
+    void reloadPreservingState();
 
 signals:
     void navigateToAnimal(int animalId); // emitted when animal name is clicked
@@ -41,6 +46,7 @@ private:
     void loadStats();
     void loadTable();
     void appendRows(int offset);
+    void loadAnimalTypeCombo();   // پر کردن animalTypeCombo از جدول animal_types
     void loadVaccineTypeCombo();
     void buildFilterDateWidget();
 
@@ -68,6 +74,7 @@ protected:
     int  m_offset = 0;
     static constexpr int kPageSize = 100;
     QPushButton* m_loadMoreBtn = nullptr;
+    QTimer*      m_searchDebounce = nullptr; // debounce فیلد سرچ بالای صفحه (300ms)
 };
 
 #endif

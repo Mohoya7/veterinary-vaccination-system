@@ -342,7 +342,7 @@ BackupTab::BackupTab(QWidget* parent)
                 return;
             }
             // Hash the backup password before storing
-            QString hashedPwd = Database::hashPassword(newEdit->text());
+            QString hashedPwd = newEdit->text();
             QSqlQuery upd;
             upd.prepare(
                 "UPDATE backup_settings SET backup_password=:pwd, "

@@ -1,4 +1,5 @@
 #include "animaltypestab.h"
+#include "pagedirtytracker.h"
 #include "session.h"
 #include "styledmessagebox.h"
 #include "animaltypeinfo.h"
@@ -483,6 +484,45 @@ void AnimalTypesTab::loadAnimalTypes()
     }
 }
 
+// ─── Reload با حفظ انتخاب فعلی (نوع حیوان + نوع واکسن) ───────────────────
+void AnimalTypesTab::reloadPreservingState()
+{
+    qDebug() << "reload:";
+
+    int savedTypeId    = m_selectedAnimalTypeId;
+    int savedVaccineId = m_selectedVaccineTypeId;
+
+    loadAnimalTypes();
+
+    int foundRow = -1;
+    for (int i = 0; i < m_animalTypeList->count(); ++i) {
+        if (m_animalTypeList->item(i)->data(Qt::UserRole).toInt() == savedTypeId) {
+            foundRow = i;
+            break;
+        }
+    }
+
+    if (foundRow < 0) {
+        // نوع حیوان قبلی حذف شده — جزئیات پاک می‌شود
+        clearDetail();
+        m_animalTypeList->setCurrentRow(-1);
+        return;
+    }
+
+    // setCurrentRow هندلر onAnimalTypeSelected را صدا می‌زند که خودش
+    // loadVaccineTypes را هم اجرا می‌کند
+    m_animalTypeList->setCurrentRow(foundRow);
+
+    if (savedVaccineId > 0) {
+        for (int i = 0; i < m_vaccineList->count(); ++i) {
+            if (m_vaccineList->item(i)->data(Qt::UserRole).toInt() == savedVaccineId) {
+                m_vaccineList->setCurrentRow(i); // currentRowChanged خودش m_selectedVaccineTypeId را ست می‌کند
+                break;
+            }
+        }
+    }
+}
+
 void AnimalTypesTab::loadVaccineTypes(int animalTypeId)
 {
     m_vaccineList->clear();
@@ -561,7 +601,9 @@ void AnimalTypesTab::onAddAnimalType()
     }
 
     AnimalTypeInfo::clearCache();
-    loadAnimalTypes();
+    reloadPreservingState();
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت اضافه شد.");
 }
 
@@ -588,7 +630,9 @@ void AnimalTypesTab::onEditAnimalType()
     }
 
     AnimalTypeInfo::clearCache();
-    loadAnimalTypes();
+    reloadPreservingState();
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت ویرایش شد.");
 }
 
@@ -628,8 +672,11 @@ void AnimalTypesTab::onDeleteAnimalType()
     }
 
     AnimalTypeInfo::clearCache();
-    clearDetail();
-    loadAnimalTypes();
+    reloadPreservingState(); // چون نوع حذف شده پیدا نمی‌شود، خودش clearDetail می‌کند
+    // حذف نوع حیوان یعنی حذف کسکیدی حیوانات و واکسن‌هایشان هم
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Owners,
+         AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع حیوان با موفقیت حذف شد.");
 }
 
@@ -659,7 +706,9 @@ void AnimalTypesTab::onAddVaccineType()
     link.bindValue(":atid", m_selectedAnimalTypeId);
     link.exec();
 
-    loadVaccineTypes(m_selectedAnimalTypeId);
+    reloadPreservingState();
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت اضافه شد.");
 }
 
@@ -682,7 +731,9 @@ void AnimalTypesTab::onEditVaccineType()
         return;
     }
 
-    loadVaccineTypes(m_selectedAnimalTypeId);
+    reloadPreservingState();
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت ویرایش شد.");
 }
 
@@ -714,7 +765,10 @@ void AnimalTypesTab::onDeleteVaccineType()
     }
 
     m_selectedVaccineTypeId = -1;
-    loadVaccineTypes(m_selectedAnimalTypeId);
+    reloadPreservingState();
+    // حذف نوع واکسن یعنی حذف کسکیدی رکوردهای واکسیناسیون از همین نوع
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Vaccinations, AppPage::Reminders});
     StyledMessageBox::success(this, "موفق", "نوع واکسن با موفقیت حذف شد.");
 }
 

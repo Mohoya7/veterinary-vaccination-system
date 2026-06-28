@@ -18,6 +18,10 @@ public:
     explicit AddVaccineDialog(int animalId, int vaccinationId, QWidget *parent = nullptr);
     ~AddVaccineDialog();
 
+    // برای دکمه‌ی «+» تمدید سریع: در حالت Add، نوع واکسن و تعداد روز یادآوری
+    // را از یک رکورد قبلی پیش‌پر می‌کند (قابل تغییر توسط کاربر، فقط پیش‌فرض است)
+    void prefillFrom(int vaccineTypeId, int reminderDays);
+
 private slots:
     void onVaccineTypeChanged(int index);
     void onSaveClicked();

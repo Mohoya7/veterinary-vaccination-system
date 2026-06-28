@@ -32,6 +32,7 @@ private:
     int     m_animalId       = -1;
     int     m_savedAnimalId  = -1;
     QString m_savedFileNumber;
+    int     m_originalAnimalTypeId = -1; // برای تشخیص تغییر نوع حیوان در حالت ویرایش
 };
 
 #endif

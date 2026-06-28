@@ -3,11 +3,13 @@
 #include "styledmessagebox.h"
 #include "database.h"
 #include "animaltypeinfo.h"
+#include "pagedirtytracker.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QMessageBox>
 #include <QDate>
 #include <QVBoxLayout>
+#include <QSet>
 
 // ── Add Mode ───────────────────────────────────────────────────────────────
 AddAnimalDialog::AddAnimalDialog(int ownerId, const QString& ownerPhone, QWidget *parent)
@@ -112,6 +114,7 @@ void AddAnimalDialog::loadAnimalData(int animalId)
 
     // Type
     int typeId = q.value("animal_type_id").toInt();
+    m_originalAnimalTypeId = typeId;
     for (int i = 0; i < ui->typeCombo->count(); i++) {
         if (ui->typeCombo->itemData(i).toInt() == typeId) {
             ui->typeCombo->setCurrentIndex(i);
@@ -235,7 +238,69 @@ void AddAnimalDialog::onSaveClicked()
         m_savedAnimalId = m_animalId;
     }
 
+    // ── واکسن‌های ناهم‌خوان با نوع جدید (فقط در حالت ویرایش، وقتی نوع واقعاً عوض شده) ──
+    // طبق تصمیم: اگر نوع حیوان عوض شود، واکسن‌هایی که برای نوع جدید تعریف
+    // نشده‌اند همیشه حذف می‌شوند — فقط هشدار داده می‌شود، انصراف/نگه‌داشتن
+    // وجود ندارد.
+    if (m_animalId >= 0 && m_originalAnimalTypeId != -1 && m_originalAnimalTypeId != animalTypeId) {
+        QSqlQuery cq;
+        cq.prepare(
+            "SELECT v.id, v.vaccine_type_id, vt.name "
+            "FROM vaccinations v "
+            "JOIN vaccine_types vt ON vt.id = v.vaccine_type_id "
+            "WHERE v.animal_id = :aid "
+            "AND v.vaccine_type_id NOT IN ("
+            "  SELECT vaccine_type_id FROM vaccine_type_animals WHERE animal_type_id = :newType"
+            ")");
+        cq.bindValue(":aid", m_animalId);
+        cq.bindValue(":newType", animalTypeId);
+        cq.exec();
+
+        QList<QPair<int,int>> toDelete; // id, vaccine_type_id
+        QStringList incompatibleNames;
+        while (cq.next()) {
+            toDelete.append({cq.value("id").toInt(), cq.value("vaccine_type_id").toInt()});
+            QString n = cq.value("name").toString();
+            if (!incompatibleNames.contains(n))
+                incompatibleNames << n;
+        }
+
+        if (!toDelete.isEmpty()) {
+            StyledMessageBox::warning(
+                this, "حذف واکسن‌های ناهم‌خوان",
+                QString("این حیوان %1 رکورد واکسیناسیون از نوع‌هایی دارد که برای «%2» تعریف "
+                        "نشده‌اند (%3).\nبا تأیید این پیام، نوع حیوان تغییر می‌کند و این رکوردها "
+                        "حذف می‌شوند.")
+                    .arg(toDelete.size())
+                    .arg(ui->typeCombo->currentText())
+                    .arg(incompatibleNames.join("، ")));
+
+            {
+                QSet<int> affectedVaccineTypes;
+                for (const auto& pair : toDelete) {
+                    QSqlQuery dq;
+                    dq.prepare("DELETE FROM vaccinations WHERE id = :id");
+                    dq.bindValue(":id", pair.first);
+                    dq.exec();
+                    affectedVaccineTypes.insert(pair.second);
+                }
+                // زنجیره‌ی is_renewed هر گروه را به‌روزرسانی می‌کنیم
+                // (اگر گروه کاملاً خالی شده باشد، خودش بدون کاری برمی‌گردد)
+                for (int vtId : affectedVaccineTypes)
+                    Database::onVaccinationDeleted(m_animalId, vtId, false);
+            }
+        }
+    }
+
     // Clear AnimalTypeInfo cache if type has changed
     AnimalTypeInfo::clearCache();
+
+    // این صفحه (Animals) که خودش دیالوگ را باز کرده، خودش بلافاصله
+    // showAnimalById/loadAnimals را صدا می‌زند؛ بقیه‌ی صفحات که اسم/نوع/
+    // تعداد حیوان را نمایش می‌دهند، فقط هنگام بازدید بعدی رفرش می‌شوند.
+    PageDirtyTracker::instance().markDirty(
+        {AppPage::Dashboard, AppPage::Animals, AppPage::Owners,
+         AppPage::Vaccinations, AppPage::Reminders});
+
     accept();
 }

@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QTimer>
 
 namespace Ui { class AnimalsWidget; }
 
@@ -18,11 +19,15 @@ public:
     void loadData();
     void showAnimalById(int animalId);
 
+    // به‌جای loadData(): فیلتر/سرچ/offset/پروفایل انتخاب‌شده‌ی فعلی را
+    // حفظ می‌کند و فقط دیتای تازه را دوباره می‌خواند. توسط MainWindow
+    // وقتی صفحه «کثیف» تشخیص داده شود صدا زده می‌شود.
+    void reloadPreservingState();
+
 signals:
     void navigateToOwner(int ownerId);
 
 private slots:
-    void onSearchChanged(const QString& text);
     void onTypeFilterChanged(int index);
     void onAnimalSelected(QListWidgetItem* current, QListWidgetItem* previous);
     void onAddAnimalClicked();
@@ -32,7 +37,9 @@ private slots:
 
 private:
     void applyStyle();
-    void loadAnimals(const QString& search = "", int typeFilter = 0);
+    // typeFilter اکنون animal_type_id واقعی است؛ -1 یعنی «همه‌ی انواع»
+    void loadAnimals(const QString& search = "", int typeFilter = -1);
+    void loadTypeFilterCombo();   // پر کردن typeFilterCombo از جدول animal_types
     void showAnimalProfile(int animalId);
     void clearProfile();
     void loadVaccinationHistory(int animalId);
@@ -46,6 +53,7 @@ private:
     int m_pageSize      = 50;
     bool m_hasMore      = false;
     QPushButton* m_loadMoreBtn = nullptr;
+    QTimer* m_searchDebounce   = nullptr; // debounce فیلد سرچ لیست (300ms)
 
     void appendAnimals(const QString& search, int typeFilter, int offset);
 };
